@@ -98,6 +98,43 @@ def racha_zona(serie):
     return n, z
 
 
+def cargar_spx(fechas):
+    """Cierre del SPX (^GSPC) alineado a las fechas de la serie, como referencia de
+    fondo en cada grafico. Se cachea en data/spx_close.csv para no re-descargar."""
+    cache = os.path.join(SITIO_DATA, "spx_close.csv")
+    hoy = dt.date.today().isoformat()
+    spx = None
+    if os.path.exists(cache):
+        try:
+            c = pd.read_csv(cache, parse_dates=["Fecha"]).set_index("Fecha")["SPX"]
+            if len(c) and c.index.max().date().isoformat() >= str(fechas[-1].date()):
+                spx = c
+                print("  SPX desde cache (%d dias)" % len(c))
+        except Exception:
+            spx = None
+    if spx is None:
+        try:
+            import yfinance as yf
+            print("  descargando ^GSPC...")
+            d = yf.download("^GSPC", start="2007-01-01", progress=False, auto_adjust=True)
+            cl = d["Close"]
+            if hasattr(cl, "columns"):
+                cl = cl.iloc[:, 0]
+            cl.index = pd.to_datetime(cl.index).tz_localize(None).normalize()
+            spx = cl.dropna()
+            spx.name = "SPX"
+            os.makedirs(SITIO_DATA, exist_ok=True)
+            spx.rename_axis("Fecha").to_frame("SPX").to_csv(cache)
+            print("  SPX descargado (%d dias, hasta %s)" % (len(spx), spx.index.max().date()))
+        except Exception as e:
+            print("  AVISO: no se pudo obtener el SPX (%s). Los graficos iran sin fondo."
+                  % str(e)[:70])
+            return None
+    # alineado a las fechas del panel; ffill para festivos propios de cada mercado
+    ali = spx.reindex(pd.DatetimeIndex(fechas)).ffill()
+    return [None if pd.isna(v) else round(float(v), 2) for v in ali.values]
+
+
 def main():
     os.makedirs(SITIO_DATA, exist_ok=True)
     serie = pcv.cargar_serie()
@@ -149,6 +186,7 @@ def main():
                                 else float(serie.loc[ultimo, "M%d" % k]))
                   for k in range(1, 9)},
         "fechas": fechas, "pares": pares, "meta": meta,
+        "spx": cargar_spx(pct.index),
     }
     with open(os.path.join(SITIO, "data.json"), "w", encoding="utf-8") as fh:
         json.dump(datos, fh, separators=(",", ":"))
@@ -282,7 +320,9 @@ h1 { font-size:18px; margin:0; font-weight:600; }
   <em>expanding</em> contra toda la historia anterior a esa fecha (cero lookahead) y se
   invierte, igual que en el panel original. Los primeros <strong>@@MINHIST@@ dias</strong> de
   cada serie no se publican: un percentil contra tan pocas observaciones no significa nada.
-  Cada grafico lleva selector de rango y zoom.
+  Cada grafico lleva selector de rango y zoom. La linea gris tenue del fondo es el
+  <strong>SPX</strong> (eje derecho, escala propia): sirve para leer cada tramo de la curva
+  contra lo que hacia el indice.
   <br><strong>DATOS</strong>: precio de <strong>liquidacion</strong> (settlement), no de cierre
   &mdash; difieren en 3 de cada 4 dias. Abr-2007 a ago-2018 del archivo oficial del Cboe
   Futures Exchange, contrato a contrato; de sep-2018 en adelante via TradingView, que publica
@@ -308,7 +348,9 @@ const LAYOUT_BASE = {
   paper_bgcolor:'#161b22', plot_bgcolor:'#161b22',
   font:{ color:'#c9d1d9', family:'-apple-system, sans-serif', size:11 },
   height:270, margin:{ t:30, r:16, b:34, l:44 },
-  showlegend:false, hovermode:'x unified',
+  showlegend:true, hovermode:'x unified',
+  legend:{ orientation:'h', x:1, xanchor:'right', y:1.20, font:{ size:10 },
+           bgcolor:'rgba(0,0,0,0)' },
   xaxis:{ gridcolor:'#21262d', linecolor:'#30363d', type:'date',
     rangeselector:{ buttons:[
       { count:90, label:'90D', step:'day', stepmode:'backward' },
@@ -321,6 +363,10 @@ const LAYOUT_BASE = {
     rangeslider:{ visible:false } },
   yaxis:{ range:[0,100], gridcolor:'#21262d', linecolor:'#30363d',
     tickvals:[0,5,20,50,80,95,100], tickfont:{ size:10 } },
+  // Eje derecho SOLO para el SPX: escala propia (autorange) para que el nivel del
+  // indice no aplaste la escala de percentiles. Sin rejilla, para no ensuciar el fondo.
+  yaxis2:{ overlaying:'y', side:'right', autorange:true, showgrid:false,
+    linecolor:'#30363d', tickfont:{ color:'#8b949e', size:9 } },
   shapes:[
     { type:'rect', xref:'paper', x0:0, x1:1, yref:'y', y0:95, y1:100,
       fillcolor:'#f85149', opacity:0.10, line:{ width:0 }, layer:'below' },
@@ -379,11 +425,19 @@ async function load(){
       if (pintado.has(id)) return;
       pintado.add(id);
       const par = id.replace('plot-','').replace('_','/');
-      Plotly.newPlot(id, [{
-        x: d.fechas, y: d.pares[par], type:'scattergl', mode:'lines',
+      const trazas = [];
+      // El SPX va PRIMERO para que quede por debajo, tenue, como referencia de fondo.
+      if (d.spx) trazas.push({
+        x: d.fechas, y: d.spx, type:'scattergl', mode:'lines', name:'SPX',
+        yaxis:'y2', line:{ color:'#8b949e', width:1 }, opacity:0.55, connectgaps:false,
+        hovertemplate:'<b>SPX</b>: %{y:,.0f}<extra></extra>'
+      });
+      trazas.push({
+        x: d.fechas, y: d.pares[par], type:'scattergl', mode:'lines', name:par,
         line:{ color:'#58a6ff', width:1.2 }, connectgaps:false,
         hovertemplate:'%{x|%d %b %Y}<br><b>%{y:.1f}</b><extra></extra>'
-      }], LAYOUT_BASE, { responsive:true, displaylogo:false,
+      });
+      Plotly.newPlot(id, trazas, LAYOUT_BASE, { responsive:true, displaylogo:false,
         modeBarButtonsToRemove:['lasso2d','select2d','autoScale2d'] });
       io.unobserve(en.target);
     });
