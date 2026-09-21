@@ -1,28 +1,35 @@
 """
 construir_sitio.py -- genera el sitio estatico de la curva de futuros VIX.
 
-SALIDA (carpeta sitio/):
-  index.html                      panel con los 28 pares MX/MY
-  data/vix_futuros_M1_M8.csv      la serie completa (link de descarga)
-  data/vix_percentiles_pares.csv  el percentil expanding de cada par, dia a dia
+DISENO: el mismo de los demas dashboards del usuario en GitHub Pages
+(BURST_RADAR_CALENDAR, COCKPIT_BATMAN_LT): tema oscuro GitHub
+(#0d1117 / #161b22 / #c9d1d9 / #30363d), Plotly 2.30.0 desde CDN, cabecera con
+KPIs y bloques .note. Los 28 paneles van A TODO EL ANCHO y apilados, cada uno
+con su selector de rango (90D / 1A / 3A / 10A / All) y el zoom de Plotly.
+
+SALIDA (carpeta sitio/ = raiz del repo manumartinb/vix-term-structure):
+  index.html                      panel con los 28 pares
+  data.json                       series que consume la pagina
+  data/vix_futuros_M1_M8.csv      serie completa (descarga)
+  data/vix_percentiles_pares.csv  percentil expanding por par (descarga)
 
 QUE PINTA
-Un panel por cada par (28 en total). Cada panel lleva el percentil EXPANDING:
-para cada dia, donde queda el ratio Mj/Mi de ese dia dentro de TODA su historia
-previa (nada de mirar al futuro). Convencion heredada del VIX Studio:
+Un panel por par Mj/Mi (28). Percentil EXPANDING: para cada dia, donde queda el
+ratio de ese dia dentro de TODA su historia previa (sin mirar al futuro).
+Convencion heredada del VIX Studio:
   100 = backwardation extrema (curva del reves)   0 = contango extremo
 
-Los primeros MIN_HISTORIA dias no se pintan: un percentil contra 20 observaciones
-no significa nada. Se dice en la pagina.
+Los primeros MIN_HISTORIA dias no se publican: un percentil contra 20
+observaciones no significa nada.
 
-Graficos en SVG generado aqui (sin librerias JS): la pagina abre al instante y
-funciona sin conexion. Se submuestrea a MAX_PUNTOS por grafico para que el HTML
-no se dispare; el CSV que se descarga lleva TODOS los dias.
+RENDIMIENTO: 28 graficos Plotly de ~4.900 puntos no se pintan de golpe. Se
+dibujan bajo demanda con IntersectionObserver segun entran en pantalla.
 
 Reglas tecnicas del proyecto: ASCII, cp1252.
 """
 
 import os
+import json
 import bisect
 import datetime as dt
 
@@ -35,79 +42,60 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SITIO = os.path.join(HERE, "sitio")
 SITIO_DATA = os.path.join(SITIO, "data")
 
-MIN_HISTORIA = 250      # dias antes de emitir el primer percentil
-MAX_PUNTOS = 900        # submuestreo del grafico (el CSV va completo)
-W, H = 340, 96          # tamano del area de dibujo de cada panel
-UMB_ALTO, UMB_BAJO = 95, 5
+MIN_HISTORIA = 250
+UMB_ALTO, UMB_BAJO = 95.0, 5.0
+
+VERDE, AMBAR, ROJO, AZUL = "#3fb950", "#d29922", "#f85149", "#58a6ff"
 
 
 def percentil_expanding(valores):
-    """Percentil (0-100, ya invertido) de cada valor contra TODOS los anteriores.
-
-    Usa una lista ordenada incremental: O(n log n) en vez de O(n^2)."""
+    """Percentil (0-100, invertido) de cada valor contra TODOS los anteriores.
+    Lista ordenada incremental: O(n log n), no O(n^2)."""
     orden = []
     out = np.full(len(valores), np.nan)
     for i, v in enumerate(valores):
         if not np.isnan(v):
             if len(orden) >= MIN_HISTORIA:
-                menores = bisect.bisect_left(orden, v)
                 if v < orden[0]:
                     p = 0.0
                 elif v > orden[-1]:
                     p = 1.0
                 else:
-                    p = menores / float(len(orden) - 1)
+                    p = bisect.bisect_left(orden, v) / float(len(orden) - 1)
                 out[i] = (1.0 - p) * 100.0
             bisect.insort(orden, v)
     return out
 
 
 def color_pct(v):
-    if np.isnan(v):
-        return "#9AA5B1"
+    if v is None or (isinstance(v, float) and np.isnan(v)):
+        return "#8b949e"
     if v >= UMB_ALTO:
-        return "#9A3B3B"
+        return ROJO
     if v <= UMB_BAJO:
-        return "#2E5B8C"
-    if v >= 75:
-        return "#B4653F"
-    if v <= 25:
-        return "#3D7290"
-    return "#5B6672"
+        return AZUL
+    if v >= 80 or v <= 20:
+        return AMBAR
+    return "#c9d1d9"
 
 
-def svg_panel(fechas, serie):
-    """Grafico SVG del percentil expanding a lo largo del tiempo."""
-    m = ~np.isnan(serie)
-    if m.sum() < 2:
-        return '<div class="nodata">sin historia suficiente</div>'
-    f = fechas[m]
-    s = serie[m]
-    if len(s) > MAX_PUNTOS:
-        idx = np.linspace(0, len(s) - 1, MAX_PUNTOS).astype(int)
-        f, s = f[idx], s[idx]
+def racha_zona(serie):
+    """Dias seguidos (hasta hoy) en la misma zona: alta (>=80), baja (<=20), media."""
+    s = serie[~np.isnan(serie)]
+    if len(s) == 0:
+        return 0, "media"
 
-    x0 = f[0].value
-    span = max(1, f[-1].value - x0)
-    pts = []
-    for fi, si in zip(f, s):
-        x = (fi.value - x0) / span * W
-        y = H - (si / 100.0) * H
-        pts.append("%.0f,%.1f" % (x, y))
+    def zona(v):
+        return "alta" if v >= 80 else ("baja" if v <= 20 else "media")
 
-    # bandas de extremo (95 arriba, 5 abajo) y mediana
-    y95 = H - 0.95 * H
-    y05 = H - 0.05 * H
-    y50 = H * 0.5
-    return (
-        '<svg viewBox="0 0 %d %d" preserveAspectRatio="none" class="spark">'
-        '<rect x="0" y="0" width="%d" height="%.1f" class="zona-alta"/>'
-        '<rect x="0" y="%.1f" width="%d" height="%.1f" class="zona-baja"/>'
-        '<line x1="0" y1="%.1f" x2="%d" y2="%.1f" class="mediana"/>'
-        '<polyline points="%s"/>'
-        '</svg>'
-        % (W, H, W, y95, y05, W, H - y05, y50, W, y50, " ".join(pts))
-    )
+    z = zona(s[-1])
+    n = 0
+    for v in s[::-1]:
+        if zona(v) == z:
+            n += 1
+        else:
+            break
+    return n, z
 
 
 def main():
@@ -115,207 +103,296 @@ def main():
     serie = pcv.cargar_serie()
     r = pcv.ratios(serie)
 
-    print("Calculando percentil expanding de %d pares sobre %d dias..."
-          % (len(r.columns), len(r)))
+    print("Percentil expanding de %d pares sobre %d sesiones..." % (len(r.columns), len(r)))
     pct = pd.DataFrame(index=r.index)
     for col in r.columns:
         pct[col] = percentil_expanding(r[col].values)
 
-    fechas = r.index
-    # El titular usa el ultimo dia con la curva COMPLETA. La sesion en curso suele no
-    # tener aun el vencimiento mas lejano, y con dropna(how="all") los 7 pares que
-    # cuelgan de M8 salian todos "--".
     completos = pct.dropna()
     ultimo = completos.index[-1] if len(completos) else pct.dropna(how="all").index[-1]
     hoy = pct.loc[ultimo]
     curva = serie.loc[ultimo].dropna()
 
-    # ficheros de datos
-    serie.reset_index().to_csv(os.path.join(SITIO_DATA, "vix_futuros_M1_M8.csv"),
-                               index=False)
+    # ---- ficheros de descarga
+    serie.reset_index().to_csv(os.path.join(SITIO_DATA, "vix_futuros_M1_M8.csv"), index=False)
     pct.round(2).reset_index().to_csv(
         os.path.join(SITIO_DATA, "vix_percentiles_pares.csv"), index=False)
 
-    # paneles ordenados: primero los de M1, luego M2...
-    paneles = []
+    # ---- data.json que consume la pagina
+    fechas = [d.strftime("%Y-%m-%d") for d in pct.index]
+    pares = {}
+    for col in pct.columns:
+        pares[col] = [None if np.isnan(v) else round(float(v), 1) for v in pct[col].values]
+
+    meta = []
     for i, j in pcv.PAREJAS:
         col = "M%d/M%d" % (j, i)
         v = hoy.get(col, np.nan)
         s = pct[col].values
         val = pct[col].dropna()
-        paneles.append(
-            '<figure class="panel">'
-            '<figcaption><span class="par">%s</span>'
-            '<span class="val" style="color:%s">%s</span></figcaption>'
-            '%s'
-            '<div class="pie"><span>%s</span><span>mediana %d</span>'
-            '<span>%s</span></div>'
-            '</figure>'
-            % (col, color_pct(v), "--" if np.isnan(v) else "%d" % round(v),
-               svg_panel(fechas, s),
-               fechas[~np.isnan(s)][0].strftime("%Y") if (~np.isnan(s)).any() else "",
-               round(val.median()) if len(val) else 0,
-               ultimo.strftime("%Y"))
-        )
+        n, z = racha_zona(s)
+        meta.append({
+            "par": col, "i": i, "j": j,
+            "hoy": None if np.isnan(v) else round(float(v), 1),
+            "color": color_pct(v),
+            "mediana": round(float(val.median()), 1) if len(val) else None,
+            "racha": n, "zona": z,
+            "desde": val.index[0].strftime("%Y-%m") if len(val) else None,
+        })
+
+    datos = {
+        "generado": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "ultimo": ultimo.strftime("%Y-%m-%d"),
+        "n_sesiones": len(serie),
+        "desde": serie.index[0].strftime("%Y-%m-%d"),
+        "curva": {("M%d" % k): (None if pd.isna(serie.loc[ultimo, "M%d" % k])
+                                else float(serie.loc[ultimo, "M%d" % k]))
+                  for k in range(1, 9)},
+        "fechas": fechas, "pares": pares, "meta": meta,
+    }
+    with open(os.path.join(SITIO, "data.json"), "w", encoding="utf-8") as fh:
+        json.dump(datos, fh, separators=(",", ":"))
 
     validos = hoy.dropna()
-    html = PLANTILLA % {
-        "fecha": ultimo.strftime("%d/%m/%Y"),
-        "generado": dt.datetime.now().strftime("%d/%m/%Y %H:%M"),
-        "n_dias": len(serie),
-        "desde": serie.index[0].strftime("%b %Y"),
-        "curva": "  ".join("%.4g" % v for v in curva.values),
-        "maxpar": validos.idxmax(), "maxval": round(validos.max()),
-        "minpar": validos.idxmin(), "minval": round(validos.min()),
-        "paneles": "\n".join(paneles),
-        "min_hist": MIN_HISTORIA,
+    reemplazos = {
+        "@@FECHA@@": ultimo.strftime("%d/%m/%Y"),
+        "@@GENERADO@@": datos["generado"],
+        "@@NSES@@": "{:,}".format(len(serie)).replace(",", "."),
+        "@@DESDE@@": serie.index[0].strftime("%b %Y"),
+        "@@CURVA@@": " &middot; ".join("%.4g" % v for v in curva.values),
+        "@@MAXPAR@@": validos.idxmax(), "@@MAXVAL@@": "%d" % round(validos.max()),
+        "@@MINPAR@@": validos.idxmin(), "@@MINVAL@@": "%d" % round(validos.min()),
+        "@@MINHIST@@": str(MIN_HISTORIA),
     }
+    html = PLANTILLA
+    for k, v in reemplazos.items():
+        html = html.replace(k, v)
     with open(os.path.join(SITIO, "index.html"), "w", encoding="utf-8") as fh:
         fh.write(html)
 
-    print("Escrito %s" % os.path.join(SITIO, "index.html"))
-    print("  paneles: %d | ultimo dia: %s | tamano html: %.0f KB"
-          % (len(paneles), ultimo.date(),
-             os.path.getsize(os.path.join(SITIO, "index.html")) / 1024.0))
+    def kb(p):
+        return os.path.getsize(p) / 1024.0
+
+    print("Escrito index.html (%.0f KB) + data.json (%.0f KB)"
+          % (kb(os.path.join(SITIO, "index.html")), kb(os.path.join(SITIO, "data.json"))))
+    print("  ultimo dia: %s | pares: %d | sesiones: %d"
+          % (ultimo.date(), len(meta), len(serie)))
 
 
-PLANTILLA = u"""<!doctype html>
+PLANTILLA = u"""<!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Curva de futuros VIX - percentil historico por par</title>
+<meta charset="UTF-8">
+<title>VIX FUTURES - estructura temporal (28 pares M1-M8)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
 <style>
-:root{
-  --paper:#F7F8FA; --card:#FFFFFF; --ink:#131A22; --body:#495460;
-  --mute:#7C8894; --rule:#E1E6EC; --rule2:#C8D0D9;
-  --alto:#9A3B3B; --bajo:#2E5B8C;
-  --sans:"Public Sans","Segoe UI",system-ui,sans-serif;
-  --mono:"IBM Plex Mono","Cascadia Mono",Consolas,monospace;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--paper);color:var(--ink);font-family:var(--sans);
-  font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
-.wrap{max-width:1320px;margin:0 auto;padding:0 clamp(16px,3.5vw,48px)}
-header{padding-block:clamp(36px,6vw,72px) clamp(24px,4vw,44px)}
-.kicker{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.18em;
-  text-transform:uppercase;color:var(--mute)}
-h1{font-size:clamp(28px,4.5vw,44px);line-height:1.08;letter-spacing:-.02em;
-  margin-top:.5em;max-width:20ch;font-weight:700}
-.lede{margin-top:.8em;font-size:clamp(15px,1.5vw,18px);color:var(--body);max-width:62ch}
-.barra{display:flex;flex-wrap:wrap;gap:10px;margin-top:clamp(20px,3vw,30px)}
-.btn{display:inline-flex;align-items:center;gap:.5em;background:var(--ink);color:#fff;
-  text-decoration:none;font-weight:600;font-size:14px;padding:11px 18px;border-radius:3px}
-.btn.sec{background:var(--card);color:var(--ink);border:1px solid var(--rule2)}
-.btn:hover{opacity:.87}
-.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
-  margin-top:clamp(26px,4vw,40px);border-top:1px solid var(--rule2)}
-.figs>div{padding:18px 22px 14px;border-right:1px solid var(--rule)}
-.figs>div:first-child{padding-left:0}
-.figs>div:last-child{border-right:0}
-.figs .k{display:block;font-family:var(--mono);font-size:10.5px;font-weight:600;
-  letter-spacing:.15em;text-transform:uppercase;color:var(--mute);margin-bottom:.7em}
-.figs .n{display:block;font-family:var(--mono);font-size:clamp(20px,2.6vw,30px);
-  font-weight:500;letter-spacing:-.02em}
-.figs .s{display:block;margin-top:.5em;font-size:13.5px;color:var(--body)}
-hr{border:0;height:1px;background:var(--rule2)}
-section{padding-block:clamp(30px,5vw,54px)}
-h2{font-size:clamp(20px,2.6vw,28px);letter-spacing:-.015em}
-.sub{margin-top:.6em;color:var(--body);max-width:70ch;font-size:15px}
-.leyenda{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:18px;font-size:13px;color:var(--body)}
-.leyenda b{display:inline-flex;align-items:center;gap:.45em;font-weight:500}
-.sw{width:11px;height:11px;border-radius:2px;display:inline-block}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));
-  gap:14px;margin-top:clamp(22px,3vw,32px)}
-.panel{background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:12px 14px 10px}
-figcaption{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
-.par{font-family:var(--mono);font-weight:600;font-size:14px;letter-spacing:.02em}
-.val{font-family:var(--mono);font-weight:600;font-size:22px;letter-spacing:-.02em}
-.spark{width:100%%;height:78px;display:block}
-.spark polyline{fill:none;stroke:#2E5B8C;stroke-width:1.1;vector-effect:non-scaling-stroke;
-  stroke-linejoin:round;stroke-linecap:round}
-.zona-alta{fill:#9A3B3B;opacity:.07}
-.zona-baja{fill:#2E5B8C;opacity:.07}
-.mediana{stroke:#C8D0D9;stroke-width:1;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
-.pie{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;
-  color:var(--mute);margin-top:6px}
-.nodata{height:78px;display:flex;align-items:center;justify-content:center;
-  font-size:12px;color:var(--mute)}
-footer{border-top:1px solid var(--ink);margin-top:clamp(28px,4vw,48px);
-  padding-block:28px 56px}
-footer p{max-width:78ch;font-size:13.5px;line-height:1.6;color:var(--mute)}
-footer p+p{margin-top:.8em}
-footer b{color:var(--body)}
-code{font-family:var(--mono);font-size:.92em;background:var(--paper);
-  border:1px solid var(--rule);border-radius:2px;padding:0 4px}
-@media (max-width:640px){.figs>div{border-right:0;border-bottom:1px solid var(--rule)}}
+:root { --bg:#0d1117; --panel:#161b22; --text:#c9d1d9; --muted:#8b949e; --border:#30363d; --maxw:1560px; }
+* { box-sizing:border-box; }
+body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       background:var(--bg); color:var(--text); padding:16px; }
+.header { max-width:var(--maxw); margin:0 auto 16px auto; display:flex; flex-wrap:wrap;
+          align-items:flex-start; justify-content:space-between; gap:12px; }
+h1 { font-size:18px; margin:0; font-weight:600; }
+.subtitle { color:var(--muted); font-size:13px; margin-top:2px; max-width:86ch; line-height:1.5; }
+.latest-group { display:flex; gap:8px; flex-wrap:wrap; }
+.latest { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:9px 12px; min-width:152px; }
+.latest .v { font-size:23px; font-weight:700; }
+.latest .label { font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
+.latest .mini { font-size:11px; color:var(--muted); margin-top:3px; }
+.dl { max-width:var(--maxw); margin:0 auto 14px auto; display:flex; gap:8px; flex-wrap:wrap; }
+.dl a { display:inline-flex; align-items:center; gap:.45em; background:var(--panel); color:var(--text);
+        border:1px solid var(--border); border-radius:6px; padding:8px 13px; font-size:12.5px;
+        text-decoration:none; font-weight:600; }
+.dl a:hover { border-color:#58a6ff; color:#58a6ff; }
+.note { max-width:var(--maxw); margin:12px auto; color:var(--muted); font-size:13px; line-height:1.55;
+        background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:12px 14px; }
+.note strong { color:var(--text); }
+.note code { font-family:ui-monospace,Menlo,monospace; background:#21262d; padding:1px 5px;
+             border-radius:3px; font-size:12px; color:var(--text); }
+.section-title { max-width:var(--maxw); margin:26px auto 6px auto; font-size:16px; font-weight:700;
+                 color:var(--text); border-bottom:2px solid var(--border); padding-bottom:6px; }
+.pane { max-width:var(--maxw); margin:0 auto 14px auto; background:var(--panel);
+        border:1px solid var(--border); border-radius:6px; padding:10px 12px 4px 12px; }
+.pane-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+             flex-wrap:wrap; padding:0 2px 6px 2px; }
+.pane-par { font-family:ui-monospace,Menlo,monospace; font-size:15px; font-weight:700; letter-spacing:.3px; }
+.pane-par .sub { color:var(--muted); font-weight:400; font-size:11.5px; margin-left:8px; letter-spacing:0; }
+.pane-kpis { display:flex; gap:14px; align-items:baseline; flex-wrap:wrap; }
+.pane-kpi { font-size:11px; color:var(--muted); }
+.pane-kpi b { font-size:13px; color:var(--text); font-weight:600; margin-left:4px;
+              font-family:ui-monospace,Menlo,monospace; }
+.pane-now { font-family:ui-monospace,Menlo,monospace; font-size:26px; font-weight:700; line-height:1; }
+.zona { display:inline-block; padding:2px 9px; border-radius:12px; font-size:10.5px; font-weight:600; }
+.zona.alta { background:rgba(207,34,46,0.20); color:#f85149; }
+.zona.baja { background:rgba(56,139,253,0.18); color:#58a6ff; }
+.zona.media { background:rgba(110,118,129,0.20); color:#8b949e; }
+.plot { width:100%; height:270px; }
+.footer { max-width:var(--maxw); margin:20px auto 0 auto; color:var(--muted); font-size:12px;
+          border-top:1px solid var(--border); padding-top:14px; line-height:1.6; }
+.footer b { color:var(--text); }
+.footer p + p { margin-top:8px; }
+.err { padding:30px; text-align:center; color:#f85149; }
 </style>
 </head>
 <body>
-<div class="wrap">
 
-<header>
-  <span class="kicker">Estructura temporal del VIX</span>
-  <h1>Percentil historico de cada par de la curva</h1>
-  <p class="lede">Los 8 primeros vencimientos de futuros del VIX, cruzados entre si
-  (28 pares). Para cada dia se calcula donde queda ese par dentro de <b>toda su
-  historia previa</b>. Datos desde %(desde)s, %(n_dias)s sesiones.</p>
-  <div class="barra">
-    <a class="btn" href="data/vix_futuros_M1_M8.csv" download>Descargar CSV historico (M1-M8)</a>
-    <a class="btn sec" href="data/vix_percentiles_pares.csv" download>CSV de percentiles (28 pares)</a>
+<div class="header">
+  <div>
+    <h1>VIX FUTURES &mdash; estructura temporal</h1>
+    <div class="subtitle">Los 8 primeros vencimientos de futuros del VIX cruzados entre si
+      (28 pares). Para cada dia, donde queda ese par dentro de <strong>toda su historia
+      previa</strong> &mdash; percentil expanding, sin mirar al futuro. Desde @@DESDE@@,
+      @@NSES@@ sesiones.</div>
   </div>
-  <div class="figs">
-    <div><span class="k">Ultimo dato</span><span class="n">%(fecha)s</span>
-         <span class="s">curva: %(curva)s</span></div>
-    <div><span class="k">Par mas alto hoy</span>
-         <span class="n" style="color:var(--alto)">%(maxval)s</span>
-         <span class="s">%(maxpar)s &mdash; lo mas cerca de backwardation</span></div>
-    <div><span class="k">Par mas bajo hoy</span>
-         <span class="n" style="color:var(--bajo)">%(minval)s</span>
-         <span class="s">%(minpar)s &mdash; lo mas cerca de contango extremo</span></div>
+  <div class="latest-group">
+    <div class="latest">
+      <div class="label">Ultimo dato</div>
+      <div><span class="v">@@FECHA@@</span></div>
+      <div class="mini">curva: @@CURVA@@</div>
+    </div>
+    <div class="latest">
+      <div class="label">Par mas alto</div>
+      <div><span class="v" style="color:#f85149">@@MAXVAL@@</span></div>
+      <div class="mini">@@MAXPAR@@ &middot; lo mas cerca de backwardation</div>
+    </div>
+    <div class="latest">
+      <div class="label">Par mas bajo</div>
+      <div><span class="v" style="color:#58a6ff">@@MINVAL@@</span></div>
+      <div class="mini">@@MINPAR@@ &middot; lo mas cerca de contango extremo</div>
+    </div>
   </div>
-</header>
-
-<hr>
-
-<section>
-  <h2>Los 28 pares</h2>
-  <p class="sub">Cada panel es un par Mj/Mi. La linea recorre su percentil a lo largo
-  del tiempo; el numero grande es el valor de hoy. <b>100 significa que la curva esta
-  del reves</b> en ese tramo (el vencimiento corto mas caro que el largo, tipico de
-  panico) y <b>0 significa contango extremo</b> (el largo mucho mas caro, tipico de
-  calma). La franja roja marca el 5%% superior y la azul el 5%% inferior; la linea
-  discontinua es la mediana.</p>
-  <div class="leyenda">
-    <b><span class="sw" style="background:#9A3B3B"></span>95 o mas: extremo alto</b>
-    <b><span class="sw" style="background:#2E5B8C"></span>5 o menos: extremo bajo</b>
-    <b><span class="sw" style="background:#5B6672"></span>zona normal</b>
-  </div>
-  <div class="grid">
-%(paneles)s
-  </div>
-</section>
-
-<footer>
-  <p><b>Fuentes.</b> Precios de liquidacion (settlement) de los futuros VIX del Cboe
-  Futures Exchange. De abril-2007 a agosto-2018, del archivo publico oficial del propio
-  exchange, contrato a contrato. De septiembre-2018 en adelante, de TradingView, que
-  publica el mismo precio de liquidacion (verificado: coincide al cuarto decimal con el
-  settlement oficial en las fechas recientes que el exchange aun sirve).</p>
-  <p><b>Metodo.</b> Para cada dia se ordenan los contratos vivos por vencimiento y se
-  asignan a M1..M8 (M1 = el mas proximo a vencer; el contrato deja de ser M1 el mismo
-  dia que liquida). El percentil de cada par es <i>expanding</i>: se compara contra toda
-  la historia anterior a esa fecha, sin mirar al futuro. Los primeros %(min_hist)s dias
-  de cada serie no se pintan porque un percentil contra tan pocas observaciones no
-  significa nada. Se filtran los dias sin sesion usando el calendario del CFE.</p>
-  <p><b>Aviso sobre 2007.</b> Hasta el 23 de marzo de 2007 los futuros del VIX cotizaban
-  a diez veces el indice; el 26 de marzo el exchange los reescalo. Esta serie empieza
-  despues de ese cambio para no mezclar las dos escalas.</p>
-  <p>Generado el %(generado)s. Datos de mercado publicos, publicados sin garantia de
-  exactitud y sin fin comercial. Esto no es asesoramiento de inversion.</p>
-</footer>
-
 </div>
+
+<div class="dl">
+  <a href="data/vix_futuros_M1_M8.csv" download>&darr; CSV historico M1-M8</a>
+  <a href="data/vix_percentiles_pares.csv" download>&darr; CSV percentiles (28 pares)</a>
+  <a href="data.json" download>&darr; data.json</a>
+  <a href="https://github.com/manumartinb/vix-term-structure" target="_blank" rel="noopener">Repo</a>
+</div>
+
+<div class="note">
+  <strong>COMO LEERLO</strong>: cada panel es un par <code>Mj/Mi</code>. El numero grande es
+  el percentil de HOY. <strong>Cerca de 100</strong> = ese tramo de la curva esta lo mas
+  cerca posible de <strong>backwardation</strong> (el vencimiento corto caro respecto al
+  largo): regimen de estres, theta a favor del vendedor de front month.
+  <strong>Cerca de 0</strong> = <strong>contango extremo</strong> (el largo mucho mas caro):
+  regimen de calma, theta en contra.
+  <br><strong>METODO</strong>: ratio del par = <code>Mj/Mi - 1</code>. Su percentil se calcula
+  <em>expanding</em> contra toda la historia anterior a esa fecha (cero lookahead) y se
+  invierte, igual que en el panel original. Los primeros <strong>@@MINHIST@@ dias</strong> de
+  cada serie no se publican: un percentil contra tan pocas observaciones no significa nada.
+  Cada grafico lleva selector de rango y zoom.
+  <br><strong>DATOS</strong>: precio de <strong>liquidacion</strong> (settlement), no de cierre
+  &mdash; difieren en 3 de cada 4 dias. Abr-2007 a ago-2018 del archivo oficial del Cboe
+  Futures Exchange, contrato a contrato; de sep-2018 en adelante via TradingView, que publica
+  el mismo settlement. Validado contra el settlement oficial en las 2.436 sesiones en que el
+  exchange lo sirve: <strong>98,77% de coincidencia exacta</strong>.
+</div>
+
+<div class="section-title">Los 28 pares de la curva</div>
+<div id="panes"><div class="err">Cargando...</div></div>
+
+<div class="footer">
+  <p><b>Roll</b>: un contrato deja de ser M1 el mismo dia en que liquida. <b>Dias sin sesion</b>:
+  filtrados con el calendario real del CFE (algunos proveedores emiten barra para la sesion
+  nocturna del domingo, que no es dia de liquidacion). <b>Reescalado de 2007</b>: hasta el
+  23-mar-2007 los futuros del VIX cotizaban a diez veces el indice; esta serie arranca despues
+  del cambio para no mezclar escalas.</p>
+  <p>Generado el @@GENERADO@@ &middot; datos de mercado publicos, sin garantia de exactitud y
+  sin fin comercial &middot; esto no es asesoramiento de inversion.</p>
+</div>
+
+<script>
+const LAYOUT_BASE = {
+  paper_bgcolor:'#161b22', plot_bgcolor:'#161b22',
+  font:{ color:'#c9d1d9', family:'-apple-system, sans-serif', size:11 },
+  height:270, margin:{ t:30, r:16, b:34, l:44 },
+  showlegend:false, hovermode:'x unified',
+  xaxis:{ gridcolor:'#21262d', linecolor:'#30363d', type:'date',
+    rangeselector:{ buttons:[
+      { count:90, label:'90D', step:'day', stepmode:'backward' },
+      { count:1, label:'1A', step:'year', stepmode:'backward' },
+      { count:3, label:'3A', step:'year', stepmode:'backward' },
+      { count:10, label:'10A', step:'year', stepmode:'backward' },
+      { step:'all', label:'All' } ],
+      bgcolor:'#21262d', activecolor:'#6d28d9', font:{ color:'#c9d1d9', size:10 },
+      bordercolor:'#30363d', borderwidth:1, y:1.18, x:0 },
+    rangeslider:{ visible:false } },
+  yaxis:{ range:[0,100], gridcolor:'#21262d', linecolor:'#30363d',
+    tickvals:[0,5,20,50,80,95,100], tickfont:{ size:10 } },
+  shapes:[
+    { type:'rect', xref:'paper', x0:0, x1:1, yref:'y', y0:95, y1:100,
+      fillcolor:'#f85149', opacity:0.10, line:{ width:0 }, layer:'below' },
+    { type:'rect', xref:'paper', x0:0, x1:1, yref:'y', y0:0, y1:5,
+      fillcolor:'#58a6ff', opacity:0.10, line:{ width:0 }, layer:'below' },
+    { type:'line', xref:'paper', x0:0, x1:1, yref:'y', y0:50, y1:50,
+      line:{ color:'#30363d', width:1, dash:'dot' }, layer:'below' }
+  ]
+};
+
+function esc(s){
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function load(){
+  let d;
+  try { d = await (await fetch('data.json?v=' + Date.now())).json(); }
+  catch(e){
+    document.getElementById('panes').innerHTML =
+      '<div class="err">No se pudo cargar data.json</div>';
+    return;
+  }
+
+  const cont = document.getElementById('panes');
+  cont.innerHTML = '';
+  const zonaTxt = { alta:'zona alta', baja:'zona baja', media:'zona media' };
+
+  d.meta.forEach(m => {
+    const el = document.createElement('div');
+    el.className = 'pane';
+    el.innerHTML =
+      '<div class="pane-head">' +
+        '<div class="pane-par">' + esc(m.par) +
+          '<span class="sub">M' + m.j + ' frente a M' + m.i +
+          ' &middot; desde ' + esc(m.desde || '--') + '</span></div>' +
+        '<div class="pane-kpis">' +
+          '<span class="pane-kpi">mediana<b>' +
+            (m.mediana !== null ? m.mediana : '--') + '</b></span>' +
+          '<span class="zona ' + m.zona + '">' + m.racha + ' dias en ' +
+            zonaTxt[m.zona] + '</span>' +
+          '<span class="pane-now" style="color:' + m.color + '">' +
+            (m.hoy !== null ? Math.round(m.hoy) : '--') + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="plot" id="plot-' + m.par.replace('/','_') + '"></div>';
+    cont.appendChild(el);
+  });
+
+  // 28 graficos no se pintan de golpe: se dibujan segun entran en pantalla
+  const pintado = new Set();
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      const id = en.target.id;
+      if (pintado.has(id)) return;
+      pintado.add(id);
+      const par = id.replace('plot-','').replace('_','/');
+      Plotly.newPlot(id, [{
+        x: d.fechas, y: d.pares[par], type:'scattergl', mode:'lines',
+        line:{ color:'#58a6ff', width:1.2 }, connectgaps:false,
+        hovertemplate:'%{x|%d %b %Y}<br><b>%{y:.1f}</b><extra></extra>'
+      }], LAYOUT_BASE, { responsive:true, displaylogo:false,
+        modeBarButtonsToRemove:['lasso2d','select2d','autoScale2d'] });
+      io.unobserve(en.target);
+    });
+  }, { rootMargin:'400px 0px' });
+
+  document.querySelectorAll('.plot').forEach(p => io.observe(p));
+}
+load();
+</script>
 </body>
 </html>
 """
