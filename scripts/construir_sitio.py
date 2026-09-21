@@ -45,6 +45,19 @@ SITIO_DATA = os.path.join(SITIO, "data")
 MIN_HISTORIA = 250
 UMB_ALTO, UMB_BAJO = 95.0, 5.0
 
+# --- correccion por dias a vencimiento (DTE), decidida el 2026-09-21 ---
+# El percentil GLOBAL medía el calendario, no el mercado: la base promediaba 27 a
+# 1-3 dias del vencimiento y 61 a 22-40 (33,9 puntos de sesgo), y M2/M1 13,0.
+# El percentil CONDICIONAL -- comparar cada dia SOLO contra dias historicos que
+# estaban en el mismo punto del ciclo -- deja ese sesgo en 0,4 y 0,8. Medido contra
+# las otras dos alternativas (residuo: 4,4 / vencimiento constante: 3,3), gana.
+VENTANA_DTE = 2      # +/-2 dias. Medido: +/-1 da 0,30 y +/-2 da 0,43 (bien);
+                     # +/-3 se va a 5,69 y +/-5 a 16,83. Mas ancho corrige poco.
+CAP_DTE = 30         # todo lo de >30 dias cae en el mismo tramo. OBLIGATORIO: hay
+                     # 153 valores distintos de DTE y 128 con menos de 50 casos; sin
+                     # acotar, la serie no arrancaria hasta oct-2019 (-3.033 dias).
+MIN_OBS_TRAMO = 100  # observaciones previas dentro de la ventana antes de publicar
+
 VERDE, AMBAR, ROJO, AZUL = "#3fb950", "#d29922", "#f85149", "#58a6ff"
 
 
@@ -64,6 +77,40 @@ def percentil_expanding(valores):
                     p = bisect.bisect_left(orden, v) / float(len(orden) - 1)
                 out[i] = (1.0 - p) * 100.0
             bisect.insort(orden, v)
+    return out
+
+
+def percentil_condicional(valores, dte, invertir=True):
+    """Percentil expanding CONDICIONADO a los dias que quedan para el vencimiento.
+
+    Para el dia t se compara su valor SOLO contra los dias ANTERIORES que estaban a
+    una distancia parecida del vencimiento (DTE +/- VENTANA_DTE). Asi un dato de
+    "quedan 2 dias" se juzga contra otros dias-2, no contra dias-30, que es lo que
+    hacia que el panel marcase extremos falsos en cada roll.
+
+    Implementacion: una lista ordenada por DTE exacto; la consulta suma los conteos
+    de las 2*VENTANA+1 listas de la ventana. Exacto y O(n log n).
+
+    invertir=True aplica el 1-p de la convencion del VIX Studio (100 = del reves).
+    La convexidad va con invertir=False, como en su hoja."""
+    listas = {}
+    out = np.full(len(valores), np.nan)
+    for i, (v, t) in enumerate(zip(valores, dte)):
+        if np.isnan(v) or np.isnan(t):
+            continue
+        b = int(min(t, CAP_DTE))
+        menores = total = 0
+        for k in range(b - VENTANA_DTE, b + VENTANA_DTE + 1):
+            L = listas.get(k)
+            if L:
+                menores += bisect.bisect_left(L, v)
+                total += len(L)
+        if total >= MIN_OBS_TRAMO:
+            p = menores / float(total - 1)
+            p = min(1.0, max(0.0, p))
+            out[i] = (1.0 - p) * 100.0 if invertir else p * 100.0
+        listas.setdefault(b, [])
+        bisect.insort(listas[b], v)
     return out
 
 
@@ -204,6 +251,15 @@ def series_base(serie, detalle):
     out = pd.DataFrame(index=serie.index)
     out["BASE_PCT"] = serie["M1"] / spot - 1.0
     out["BASE_DIA"] = (serie["M1"] - spot) / dte.where(dte > 0)
+    # Vencimiento constante a 30 dias: se interpola entre M1 y M2 con el peso
+    # (DTE2-30)/(DTE2-DTE1). Es el estandar del sector y ES la misma ponderacion que
+    # ya hacia su propia celda Live!H25. Se deja como serie de REFERENCIA (la
+    # correccion de verdad la hace el percentil condicional, no esta).
+    dte2 = (pd.to_datetime(detalle["VENC_M2"]) - detalle["Fecha"]).dt.days
+    dte2.index = pd.DatetimeIndex(detalle["Fecha"])
+    dte2 = dte2.reindex(serie.index)
+    w = ((dte2 - 30) / (dte2 - dte)).clip(0, 1)
+    out["BASE_CM30"] = (w * serie["M1"] + (1 - w) * serie["M2"]) / spot - 1.0
     return out
 
 
@@ -242,14 +298,22 @@ def main():
     serie = pcv.cargar_serie()
     r = pcv.ratios(serie)
 
-    print("Percentil expanding de %d pares sobre %d sesiones..." % (len(r.columns), len(r)))
+    # dias a vencimiento del front month: es la variable del ciclo para TODAS las
+    # familias (todos los contratos ruedan el mismo dia)
+    detalle = pd.read_csv(os.path.join(HERE, "data", "vix_futuros_M1_M8_detalle.csv"),
+                          parse_dates=["Fecha", "VENC_M1", "VENC_M2"])
+    dte_s = (detalle["VENC_M1"] - detalle["Fecha"]).dt.days
+    dte_s.index = pd.DatetimeIndex(detalle["Fecha"])
+    dte_s = dte_s.reindex(r.index)
+    dte_v = dte_s.values.astype(float)
+
+    print("Percentil CONDICIONAL por DTE (+/-%d, cap %d) de %d pares sobre %d sesiones..."
+          % (VENTANA_DTE, CAP_DTE, len(r.columns), len(r)))
     pct = pd.DataFrame(index=r.index)
     for col in r.columns:
-        pct[col] = percentil_expanding(r[col].values)
+        pct[col] = percentil_condicional(r[col].values, dte_v)
 
     # --- familias que faltaban (recuperadas del VIX Studio) ---
-    detalle = pd.read_csv(os.path.join(HERE, "data", "vix_futuros_M1_M8_detalle.csv"),
-                          parse_dates=["Fecha", "VENC_M1"])
     conv_raw = series_convexidad(serie)
     base_raw = series_base(serie, detalle)
     print("Convexidad (%d series) y base M1-spot (%d series)..."
@@ -257,11 +321,10 @@ def main():
     conv = pd.DataFrame(index=serie.index)
     for c in conv_raw.columns:
         # SIN invertir: en el VIX Studio la convexidad no lleva el 1-p
-        p_ = percentil_expanding(conv_raw[c].values)
-        conv[c] = np.where(np.isnan(p_), np.nan, 100.0 - p_)
+        conv[c] = percentil_condicional(conv_raw[c].values, dte_v, invertir=False)
     base = pd.DataFrame(index=serie.index)
     for c in base_raw.columns:
-        base[c] = percentil_expanding(base_raw[c].values)   # invertida, como U4
+        base[c] = percentil_condicional(base_raw[c].values, dte_v)   # invertida, como U4
 
     completos = pct.dropna()
     ultimo = completos.index[-1] if len(completos) else pct.dropna(how="all").index[-1]
@@ -480,9 +543,19 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   <strong>Cerca de 0</strong> = <strong>contango extremo</strong> (el largo mucho mas caro):
   regimen de calma, theta en contra.
   <br><strong>METODO</strong>: ratio del par = <code>Mj/Mi - 1</code>. Su percentil se calcula
-  <em>expanding</em> contra toda la historia anterior a esa fecha (cero lookahead) y se
-  invierte, igual que en el panel original. Los primeros <strong>@@MINHIST@@ dias</strong> de
-  cada serie no se publican: un percentil contra tan pocas observaciones no significa nada.
+  <em>expanding</em> contra la historia anterior a esa fecha (cero lookahead) y se
+  invierte, igual que en el panel original.
+  <br><strong>CORRECCION POR DIAS A VENCIMIENTO (importante para leerlo bien)</strong>: el
+  percentil NO se calcula contra toda la historia mezclada, sino <strong>solo contra los
+  dias que estaban en el mismo punto del ciclo mensual</strong> (mismos dias hasta el
+  vencimiento del front month, ventana &plusmn;2). Sin esto el panel medía el calendario y
+  no el mercado: como M1 converge al contado segun se acerca su vencimiento, la base
+  promediaba percentil 27 a 3 dias del roll y 61 a 30 dias &mdash; <strong>33,9 puntos de
+  sesgo puramente mecanico</strong>, y los pares con M1 arrastraban 13,0. Con la correccion
+  el sesgo baja a <strong>0,4 y 0,8</strong>.
+  <br>Consecuencia para la lectura: <strong>un 95 significa "extremo PARA ESTE PUNTO DEL
+  CICLO"</strong>, no extremo en terminos absolutos. Es lo que se quiere para leer regimen,
+  pero no es lo mismo. Los dias con menos de 100 observaciones comparables no se publican.
   Cada grafico lleva selector de rango y zoom. La linea gris tenue del fondo es el
   <strong>SPX</strong> (eje derecho, escala propia): sirve para leer cada tramo de la curva
   contra lo que hacia el indice.
@@ -535,14 +608,19 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
 </details>
 
 <details class="sec" data-sec="base">
-  <summary>Base: M1 contra el VIX al contado <span class="cnt">2 paneles</span></summary>
+  <summary>Base: M1 contra el VIX al contado <span class="cnt">3 paneles</span></summary>
   <div class="secbody">
     <div class="note" style="margin-top:6px"><code>BASE_PCT</code> = M1/contado &minus; 1,
       la base clasica. <code>BASE_DIA</code> = (M1 &minus; contado) / dias hasta
       vencimiento, la prima por dia de vida que queda: <strong>es exactamente la metrica
       que alimentaba la alerta M1-SPOT del panel original</strong>, la que estaba muerta
       porque su celda contenia el texto <code>(disabled)</code> en vez de una formula.
-      Invertidas, como las demas: alto = contado caro respecto al futuro = estres.</div>
+      Invertidas, como las demas: alto = contado caro respecto al futuro = estres.
+      <br><code>BASE_CM30</code> es la base de un futuro sintetico de <strong>vencimiento
+      constante a 30 dias</strong> (interpolando M1 y M2): es el estandar del sector y la
+      misma ponderacion que ya hacia la celda H25 del panel original. Se incluye como
+      REFERENCIA comparable con el exterior &mdash; la correccion del ciclo la hace el
+      percentil condicional, no esta.</div>
     <div id="panes-base"></div>
   </div>
 </details>

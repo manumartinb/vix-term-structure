@@ -86,12 +86,12 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
     </div>
     <div class="latest">
       <div class="label">Par mas alto</div>
-      <div><span class="v" style="color:#f85149">65</span></div>
-      <div class="mini">M2/M1 &middot; lo mas cerca de backwardation</div>
+      <div><span class="v" style="color:#f85149">59</span></div>
+      <div class="mini">M6/M5 &middot; lo mas cerca de backwardation</div>
     </div>
     <div class="latest">
       <div class="label">Par mas bajo</div>
-      <div><span class="v" style="color:#58a6ff">21</span></div>
+      <div><span class="v" style="color:#58a6ff">13</span></div>
       <div class="mini">M4/M3 &middot; lo mas cerca de contango extremo</div>
     </div>
   </div>
@@ -112,9 +112,19 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   <strong>Cerca de 0</strong> = <strong>contango extremo</strong> (el largo mucho mas caro):
   regimen de calma, theta en contra.
   <br><strong>METODO</strong>: ratio del par = <code>Mj/Mi - 1</code>. Su percentil se calcula
-  <em>expanding</em> contra toda la historia anterior a esa fecha (cero lookahead) y se
-  invierte, igual que en el panel original. Los primeros <strong>250 dias</strong> de
-  cada serie no se publican: un percentil contra tan pocas observaciones no significa nada.
+  <em>expanding</em> contra la historia anterior a esa fecha (cero lookahead) y se
+  invierte, igual que en el panel original.
+  <br><strong>CORRECCION POR DIAS A VENCIMIENTO (importante para leerlo bien)</strong>: el
+  percentil NO se calcula contra toda la historia mezclada, sino <strong>solo contra los
+  dias que estaban en el mismo punto del ciclo mensual</strong> (mismos dias hasta el
+  vencimiento del front month, ventana &plusmn;2). Sin esto el panel medía el calendario y
+  no el mercado: como M1 converge al contado segun se acerca su vencimiento, la base
+  promediaba percentil 27 a 3 dias del roll y 61 a 30 dias &mdash; <strong>33,9 puntos de
+  sesgo puramente mecanico</strong>, y los pares con M1 arrastraban 13,0. Con la correccion
+  el sesgo baja a <strong>0,4 y 0,8</strong>.
+  <br>Consecuencia para la lectura: <strong>un 95 significa "extremo PARA ESTE PUNTO DEL
+  CICLO"</strong>, no extremo en terminos absolutos. Es lo que se quiere para leer regimen,
+  pero no es lo mismo. Los dias con menos de 100 observaciones comparables no se publican.
   Cada grafico lleva selector de rango y zoom. La linea gris tenue del fondo es el
   <strong>SPX</strong> (eje derecho, escala propia): sirve para leer cada tramo de la curva
   contra lo que hacia el indice.
@@ -167,14 +177,19 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
 </details>
 
 <details class="sec" data-sec="base">
-  <summary>Base: M1 contra el VIX al contado <span class="cnt">2 paneles</span></summary>
+  <summary>Base: M1 contra el VIX al contado <span class="cnt">3 paneles</span></summary>
   <div class="secbody">
     <div class="note" style="margin-top:6px"><code>BASE_PCT</code> = M1/contado &minus; 1,
       la base clasica. <code>BASE_DIA</code> = (M1 &minus; contado) / dias hasta
       vencimiento, la prima por dia de vida que queda: <strong>es exactamente la metrica
       que alimentaba la alerta M1-SPOT del panel original</strong>, la que estaba muerta
       porque su celda contenia el texto <code>(disabled)</code> en vez de una formula.
-      Invertidas, como las demas: alto = contado caro respecto al futuro = estres.</div>
+      Invertidas, como las demas: alto = contado caro respecto al futuro = estres.
+      <br><code>BASE_CM30</code> es la base de un futuro sintetico de <strong>vencimiento
+      constante a 30 dias</strong> (interpolando M1 y M2): es el estandar del sector y la
+      misma ponderacion que ya hacia la celda H25 del panel original. Se incluye como
+      REFERENCIA comparable con el exterior &mdash; la correccion del ciclo la hace el
+      percentil condicional, no esta.</div>
     <div id="panes-base"></div>
   </div>
 </details>
@@ -185,7 +200,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   nocturna del domingo, que no es dia de liquidacion). <b>Reescalado de 2007</b>: hasta el
   23-mar-2007 los futuros del VIX cotizaban a diez veces el indice; esta serie arranca despues
   del cambio para no mezclar escalas.</p>
-  <p>Generado el 2026-09-21 13:36 &middot; datos de mercado publicos, sin garantia de exactitud y
+  <p>Generado el 2026-09-21 14:17 &middot; datos de mercado publicos, sin garantia de exactitud y
   sin fin comercial &middot; esto no es asesoramiento de inversion.</p>
 </div>
 
