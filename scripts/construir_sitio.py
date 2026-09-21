@@ -135,6 +135,108 @@ def cargar_spx(fechas):
     return [None if pd.isna(v) else round(float(v), 2) for v in ali.values]
 
 
+# ---------------------------------------------------------------------------
+# Metricas que el VIX Studio tenia y faltaban aqui (recuperadas 2026-09-21)
+# ---------------------------------------------------------------------------
+TRIPLES = [(i, i + 1, i + 2) for i in range(1, 7)]   # 6 mariposas: 123, 234 ... 678
+
+
+def series_convexidad(serie):
+    """Curvatura de cada trio consecutivo: P(n) - 2*P(n+1) + P(n+2).
+
+    Es la 'panza' de la curva. Replica Live!B25:G25 del VIX Studio
+    (`K3-2*L3+M3` y sucesivos). OJO A LA CONVENCION: en su hoja la convexidad
+    NO va invertida (a diferencia de la pendiente), asi que aqui tampoco:
+    percentil ALTO = concavo (decay a favor del front), BAJO = convexo."""
+    out = {}
+    for a, b, c in TRIPLES:
+        out["C%d%d%d" % (a, b, c)] = (serie["M%d" % a] - 2 * serie["M%d" % b]
+                                      + serie["M%d" % c])
+    return pd.DataFrame(out, index=serie.index)
+
+
+def cargar_vix_spot(fechas):
+    """Cierre del indice VIX al contado (^VIX), cacheado."""
+    cache = os.path.join(SITIO_DATA, "vix_spot.csv")
+    spot = None
+    if os.path.exists(cache):
+        try:
+            c = pd.read_csv(cache, parse_dates=["Fecha"]).set_index("Fecha")["VIX"]
+            if len(c) and c.index.max() >= fechas[-1]:
+                spot = c
+                print("  VIX spot desde cache (%d dias)" % len(c))
+        except Exception:
+            spot = None
+    if spot is None:
+        try:
+            import yfinance as yf
+            print("  descargando ^VIX...")
+            d = yf.download("^VIX", start="2007-01-01", progress=False, auto_adjust=True)
+            cl = d["Close"]
+            if hasattr(cl, "columns"):
+                cl = cl.iloc[:, 0]
+            cl.index = pd.to_datetime(cl.index).tz_localize(None).normalize()
+            spot = cl.dropna()
+            spot.name = "VIX"
+            spot.rename_axis("Fecha").to_frame("VIX").to_csv(cache)
+            print("  VIX spot descargado (%d dias)" % len(spot))
+        except Exception as e:
+            print("  AVISO: sin VIX al contado (%s)" % str(e)[:60])
+            return None
+    return spot.reindex(pd.DatetimeIndex(fechas)).ffill()
+
+
+def series_base(serie, detalle):
+    """M1 frente al VIX al contado. Dos lecturas:
+
+      BASE_PCT   = M1/spot - 1          (la base clasica, en tanto por uno)
+      BASE_DIA   = (M1 - spot) / DTE    (prima por dia de vida que queda)
+
+    La segunda es la que tenia el VIX Studio en Live!H1 (`(K3-B1)/D1`), que era
+    precisamente la celda que alimentaba la alerta U4 -- la que estaba muerta
+    porque U4 contenia el texto "(disabled)" en vez de una formula."""
+    spot = cargar_vix_spot(serie.index)
+    if spot is None:
+        return pd.DataFrame(index=serie.index)
+    dte = (pd.to_datetime(detalle["VENC_M1"]) - detalle["Fecha"]).dt.days
+    dte.index = pd.DatetimeIndex(detalle["Fecha"])
+    dte = dte.reindex(serie.index)
+    out = pd.DataFrame(index=serie.index)
+    out["BASE_PCT"] = serie["M1"] / spot - 1.0
+    out["BASE_DIA"] = (serie["M1"] - spot) / dte.where(dte > 0)
+    return out
+
+
+def envolvente(serie):
+    """Forma de la curva de HOY contra su abanico historico.
+
+    Se normaliza cada dia dividiendo por su propio M1, para quitar el nivel y
+    dejar solo la FORMA (si no, el abanico lo dominaria que el VIX estuviera en
+    12 o en 80). Devuelve los percentiles 5/25/50/75/95 de cada vencimiento."""
+    norm = serie.div(serie["M1"], axis=0)
+    norm = norm[serie["M1"] > 0]
+    q = {}
+    for p in (5, 25, 50, 75, 95):
+        q["p%02d" % p] = [None if pd.isna(v) else round(float(v), 4)
+                          for v in norm.quantile(p / 100.0).values]
+    return q
+
+
+def mapa_calor(pct, semanas=True):
+    """Historia entera de los 28 pares como rejilla par x tiempo.
+
+    Se agrega a semanal (media) para que la rejilla sea manejable: 4.900 dias x
+    28 pares son 137.000 celdas y el navegador se arrastra. A escala semanal los
+    manchones de 2008, 2018 y 2020 se ven igual de bien."""
+    g = pct.resample("W").mean() if semanas else pct
+    g = g.dropna(how="all")
+    z = []
+    for col in pct.columns:
+        z.append([None if pd.isna(v) else int(round(v)) for v in g[col].values])
+    return {"fechas": [d.strftime("%Y-%m-%d") for d in g.index],
+            "pares": list(pct.columns), "z": z}
+
+
 def main():
     os.makedirs(SITIO_DATA, exist_ok=True)
     serie = pcv.cargar_serie()
@@ -144,6 +246,22 @@ def main():
     pct = pd.DataFrame(index=r.index)
     for col in r.columns:
         pct[col] = percentil_expanding(r[col].values)
+
+    # --- familias que faltaban (recuperadas del VIX Studio) ---
+    detalle = pd.read_csv(os.path.join(HERE, "data", "vix_futuros_M1_M8_detalle.csv"),
+                          parse_dates=["Fecha", "VENC_M1"])
+    conv_raw = series_convexidad(serie)
+    base_raw = series_base(serie, detalle)
+    print("Convexidad (%d series) y base M1-spot (%d series)..."
+          % (conv_raw.shape[1], base_raw.shape[1]))
+    conv = pd.DataFrame(index=serie.index)
+    for c in conv_raw.columns:
+        # SIN invertir: en el VIX Studio la convexidad no lleva el 1-p
+        p_ = percentil_expanding(conv_raw[c].values)
+        conv[c] = np.where(np.isnan(p_), np.nan, 100.0 - p_)
+    base = pd.DataFrame(index=serie.index)
+    for c in base_raw.columns:
+        base[c] = percentil_expanding(base_raw[c].values)   # invertida, como U4
 
     completos = pct.dropna()
     ultimo = completos.index[-1] if len(completos) else pct.dropna(how="all").index[-1]
@@ -177,6 +295,30 @@ def main():
             "desde": val.index[0].strftime("%Y-%m") if len(val) else None,
         })
 
+    meta_extra = []
+    for fam, df, etiqueta in (("conv", conv, "Convexidad"), ("base", base, "Base M1-spot")):
+        for c in df.columns:
+            v = df[c].iloc[-1] if len(df) else np.nan
+            vv = df[c].dropna()
+            # el ultimo valor no-nulo (el dia en curso puede no tener M8 ni base)
+            v = vv.iloc[-1] if len(vv) else np.nan
+            n, z = racha_zona(df[c].values)
+            meta_extra.append({
+                "fam": fam, "par": c,
+                "hoy": None if np.isnan(v) else round(float(v), 1),
+                "color": color_pct(v),
+                "mediana": round(float(vv.median()), 1) if len(vv) else None,
+                "racha": n, "zona": z,
+                "desde": vv.index[0].strftime("%Y-%m") if len(vv) else None,
+            })
+    env = envolvente(serie)
+    env["hoy"] = [None if pd.isna(serie.loc[ultimo, "M%d" % k])
+                  else round(float(serie.loc[ultimo, "M%d" % k] / serie.loc[ultimo, "M1"]), 4)
+                  for k in range(1, 9)]
+    env["precios_hoy"] = [None if pd.isna(serie.loc[ultimo, "M%d" % k])
+                          else round(float(serie.loc[ultimo, "M%d" % k]), 4)
+                          for k in range(1, 9)]
+
     datos = {
         "generado": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "ultimo": ultimo.strftime("%Y-%m-%d"),
@@ -187,6 +329,13 @@ def main():
                   for k in range(1, 9)},
         "fechas": fechas, "pares": pares, "meta": meta,
         "spx": cargar_spx(pct.index),
+        "conv": {c: [None if np.isnan(v) else round(float(v), 1) for v in conv[c].values]
+                 for c in conv.columns},
+        "base": {c: [None if np.isnan(v) else round(float(v), 1) for v in base[c].values]
+                 for c in base.columns},
+        "meta_extra": meta_extra,
+        "envolvente": env,
+        "heat": mapa_calor(pct),
     }
     with open(os.path.join(SITIO, "data.json"), "w", encoding="utf-8") as fh:
         json.dump(datos, fh, separators=(",", ":"))
@@ -330,8 +479,41 @@ h1 { font-size:18px; margin:0; font-weight:600; }
   exchange lo sirve: <strong>98,77% de coincidencia exacta</strong>.
 </div>
 
+<div class="section-title">La curva de hoy contra su historia</div>
+<div class="note" style="margin-top:6px">Los 8 vencimientos de hoy, <strong>divididos por
+  su propio M1</strong> para quitar el nivel y dejar solo la FORMA (si no, el abanico lo
+  dominaria que el VIX este en 12 o en 80). Detras, donde ha estado esa forma el 90% y el
+  50% del tiempo desde 2007. Si la linea naranja se sale de la banda ancha, la curva de hoy
+  tiene una forma que casi no se ha visto.</div>
+<div class="pane"><div id="envol" class="plot" style="height:330px"></div></div>
+
+<div class="section-title">Mapa de calor: los 28 pares a lo largo del tiempo</div>
+<div class="note" style="margin-top:6px">Cada fila es un par, el tiempo va de izquierda a
+  derecha. <strong>Rojo = percentil alto</strong> (ese tramo, del reves),
+  <strong>azul = bajo</strong> (contango extremo). Sirve para ver de un vistazo si la curva
+  se rompe ENTERA (manchon vertical rojo: 2008, 2018, 2020) o solo por un tramo. Agregado a
+  semanal para que la rejilla sea manejable.</div>
+<div class="pane"><div id="heat" class="plot" style="height:520px"></div></div>
+
 <div class="section-title">Los 28 pares de la curva</div>
 <div id="panes"><div class="err">Cargando...</div></div>
+
+<div class="section-title">Convexidad: la panza de la curva</div>
+<div class="note" style="margin-top:6px">Curvatura de cada trio de vencimientos
+  consecutivos: <code>P(n) &minus; 2&middot;P(n+1) + P(n+2)</code>. <strong>OJO, esta
+  familia NO va invertida</strong> (se respeta la convencion del panel original):
+  <strong>percentil alto = curva concava</strong>, con el decay a favor del vendedor de
+  front month; <strong>bajo = convexa</strong>, decay en contra.</div>
+<div id="panes-conv"></div>
+
+<div class="section-title">Base: M1 contra el VIX al contado</div>
+<div class="note" style="margin-top:6px"><code>BASE_PCT</code> = M1/contado &minus; 1, la
+  base clasica. <code>BASE_DIA</code> = (M1 &minus; contado) / dias hasta vencimiento, la
+  prima por dia de vida que queda: <strong>es exactamente la metrica que alimentaba la
+  alerta M1-SPOT del panel original</strong>, la que estaba muerta porque su celda
+  contenia el texto <code>(disabled)</code> en vez de una formula. Invertidas, como las
+  demas: alto = contado caro respecto al futuro = estres.</div>
+<div id="panes-base"></div>
 
 <div class="footer">
   <p><b>Roll</b>: un contrato deja de ser M1 el mismo dia en que liquida. <b>Dias sin sesion</b>:
@@ -443,7 +625,95 @@ async function load(){
     });
   }, { rootMargin:'400px 0px' });
 
-  document.querySelectorAll('.plot').forEach(p => io.observe(p));
+  // ---- envolvente: forma de hoy contra su abanico historico
+  if (d.envolvente) {
+    const e = d.envolvente, xs = [1,2,3,4,5,6,7,8].map(k => 'M' + k);
+    const banda = (lo, hi, color, nombre) => ([
+      { x: xs, y: e[lo], type:'scatter', mode:'lines', line:{ width:0 },
+        hoverinfo:'skip', showlegend:false },
+      { x: xs, y: e[hi], type:'scatter', mode:'lines', line:{ width:0 },
+        fill:'tonexty', fillcolor:color, name:nombre,
+        hovertemplate:'%{x}: %{y:.3f}<extra>' + nombre + '</extra>' }
+    ]);
+    Plotly.newPlot('envol', [].concat(
+      banda('p05','p95','rgba(88,166,255,0.10)','90% del tiempo'),
+      banda('p25','p75','rgba(88,166,255,0.20)','50% del tiempo'),
+      [{ x: xs, y: e.p50, type:'scatter', mode:'lines', name:'mediana historica',
+         line:{ color:'#8b949e', width:1.4, dash:'dot' },
+         hovertemplate:'%{x}: %{y:.3f}<extra>mediana</extra>' },
+       { x: xs, y: e.hoy, type:'scatter', mode:'lines+markers', name:'HOY',
+         line:{ color:'#f0883e', width:2.6 }, marker:{ size:7 },
+         text: e.precios_hoy,
+         hovertemplate:'%{x}: %{y:.3f} x M1<br>precio %{text}<extra>HOY</extra>' }]
+    ), Object.assign({}, LAYOUT_BASE, {
+      height:330, xaxis:{ gridcolor:'#21262d', linecolor:'#30363d', type:'category' },
+      yaxis:{ autorange:true, gridcolor:'#21262d', linecolor:'#30363d',
+              title:{ text:'veces M1', font:{ size:11 } }, tickfont:{ size:10 } },
+      yaxis2:{ visible:false }, shapes:[],
+      legend:{ orientation:'h', x:0, y:1.13, font:{ size:10 }, bgcolor:'rgba(0,0,0,0)' }
+    }), { responsive:true, displaylogo:false });
+  }
+
+  // ---- mapa de calor
+  if (d.heat) {
+    Plotly.newPlot('heat', [{
+      z: d.heat.z, x: d.heat.fechas, y: d.heat.pares, type:'heatmap',
+      zmin:0, zmax:100, colorscale:[
+        [0,'#1f4b7a'], [0.2,'#2e5b8c'], [0.45,'#21262d'],
+        [0.55,'#21262d'], [0.8,'#b3454a'], [1,'#f85149']],
+      colorbar:{ thickness:10, len:0.85, tickfont:{ size:9, color:'#8b949e' },
+                 outlinewidth:0 },
+      hovertemplate:'%{y}<br>%{x|%b %Y}<br><b>%{z}</b><extra></extra>'
+    }], Object.assign({}, LAYOUT_BASE, {
+      height:520, margin:{ t:16, r:16, b:34, l:64 }, showlegend:false,
+      xaxis:{ gridcolor:'#21262d', linecolor:'#30363d', type:'date' },
+      yaxis:{ autorange:'reversed',
+              tickfont:{ size:9, family:'ui-monospace,Menlo,monospace' },
+              gridcolor:'#21262d', linecolor:'#30363d' },
+      yaxis2:{ visible:false }, shapes:[]
+    }), { responsive:true, displaylogo:false });
+  }
+
+  // ---- familias extra (convexidad y base) con el mismo formato de panel
+  if (d.meta_extra) {
+    const destinos = { conv:'panes-conv', base:'panes-base' };
+    d.meta_extra.forEach(m => {
+      const cont2 = document.getElementById(destinos[m.fam]);
+      if (!cont2) return;
+      const el = document.createElement('div');
+      el.className = 'pane';
+      el.innerHTML =
+        '<div class="pane-head">' +
+          '<div class="pane-par">' + esc(m.par) +
+            '<span class="sub">desde ' + esc(m.desde || '--') + '</span></div>' +
+          '<div class="pane-kpis">' +
+            '<span class="pane-kpi">mediana<b>' +
+              (m.mediana !== null ? m.mediana : '--') + '</b></span>' +
+            '<span class="zona ' + m.zona + '">' + m.racha + ' dias en ' +
+              zonaTxt[m.zona] + '</span>' +
+            '<span class="pane-now" style="color:' + m.color + '">' +
+              (m.hoy !== null ? Math.round(m.hoy) : '--') + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="plot" id="x-' + m.fam + '-' + m.par + '"></div>';
+      cont2.appendChild(el);
+      const trazas = [];
+      if (d.spx) trazas.push({
+        x: d.fechas, y: d.spx, type:'scattergl', mode:'lines', name:'SPX',
+        yaxis:'y2', line:{ color:'#8b949e', width:1 }, opacity:0.55, connectgaps:false,
+        hovertemplate:'<b>SPX</b>: %{y:,.0f}<extra></extra>' });
+      trazas.push({
+        x: d.fechas, y: d[m.fam][m.par], type:'scattergl', mode:'lines', name:m.par,
+        line:{ color: m.fam === 'conv' ? '#a78bfa' : '#3fb950', width:1.2 },
+        connectgaps:false,
+        hovertemplate:'%{x|%d %b %Y}<br><b>%{y:.1f}</b><extra></extra>' });
+      Plotly.newPlot('x-' + m.fam + '-' + m.par, trazas, LAYOUT_BASE,
+        { responsive:true, displaylogo:false,
+          modeBarButtonsToRemove:['lasso2d','select2d','autoScale2d'] });
+    });
+  }
+
+  document.querySelectorAll('#panes .plot').forEach(p => io.observe(p));
 }
 load();
 </script>

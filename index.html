@@ -111,8 +111,41 @@ h1 { font-size:18px; margin:0; font-weight:600; }
   exchange lo sirve: <strong>98,77% de coincidencia exacta</strong>.
 </div>
 
+<div class="section-title">La curva de hoy contra su historia</div>
+<div class="note" style="margin-top:6px">Los 8 vencimientos de hoy, <strong>divididos por
+  su propio M1</strong> para quitar el nivel y dejar solo la FORMA (si no, el abanico lo
+  dominaria que el VIX este en 12 o en 80). Detras, donde ha estado esa forma el 90% y el
+  50% del tiempo desde 2007. Si la linea naranja se sale de la banda ancha, la curva de hoy
+  tiene una forma que casi no se ha visto.</div>
+<div class="pane"><div id="envol" class="plot" style="height:330px"></div></div>
+
+<div class="section-title">Mapa de calor: los 28 pares a lo largo del tiempo</div>
+<div class="note" style="margin-top:6px">Cada fila es un par, el tiempo va de izquierda a
+  derecha. <strong>Rojo = percentil alto</strong> (ese tramo, del reves),
+  <strong>azul = bajo</strong> (contango extremo). Sirve para ver de un vistazo si la curva
+  se rompe ENTERA (manchon vertical rojo: 2008, 2018, 2020) o solo por un tramo. Agregado a
+  semanal para que la rejilla sea manejable.</div>
+<div class="pane"><div id="heat" class="plot" style="height:520px"></div></div>
+
 <div class="section-title">Los 28 pares de la curva</div>
 <div id="panes"><div class="err">Cargando...</div></div>
+
+<div class="section-title">Convexidad: la panza de la curva</div>
+<div class="note" style="margin-top:6px">Curvatura de cada trio de vencimientos
+  consecutivos: <code>P(n) &minus; 2&middot;P(n+1) + P(n+2)</code>. <strong>OJO, esta
+  familia NO va invertida</strong> (se respeta la convencion del panel original):
+  <strong>percentil alto = curva concava</strong>, con el decay a favor del vendedor de
+  front month; <strong>bajo = convexa</strong>, decay en contra.</div>
+<div id="panes-conv"></div>
+
+<div class="section-title">Base: M1 contra el VIX al contado</div>
+<div class="note" style="margin-top:6px"><code>BASE_PCT</code> = M1/contado &minus; 1, la
+  base clasica. <code>BASE_DIA</code> = (M1 &minus; contado) / dias hasta vencimiento, la
+  prima por dia de vida que queda: <strong>es exactamente la metrica que alimentaba la
+  alerta M1-SPOT del panel original</strong>, la que estaba muerta porque su celda
+  contenia el texto <code>(disabled)</code> en vez de una formula. Invertidas, como las
+  demas: alto = contado caro respecto al futuro = estres.</div>
+<div id="panes-base"></div>
 
 <div class="footer">
   <p><b>Roll</b>: un contrato deja de ser M1 el mismo dia en que liquida. <b>Dias sin sesion</b>:
@@ -120,7 +153,7 @@ h1 { font-size:18px; margin:0; font-weight:600; }
   nocturna del domingo, que no es dia de liquidacion). <b>Reescalado de 2007</b>: hasta el
   23-mar-2007 los futuros del VIX cotizaban a diez veces el indice; esta serie arranca despues
   del cambio para no mezclar escalas.</p>
-  <p>Generado el 2026-09-21 12:11 &middot; datos de mercado publicos, sin garantia de exactitud y
+  <p>Generado el 2026-09-21 12:30 &middot; datos de mercado publicos, sin garantia de exactitud y
   sin fin comercial &middot; esto no es asesoramiento de inversion.</p>
 </div>
 
@@ -224,7 +257,95 @@ async function load(){
     });
   }, { rootMargin:'400px 0px' });
 
-  document.querySelectorAll('.plot').forEach(p => io.observe(p));
+  // ---- envolvente: forma de hoy contra su abanico historico
+  if (d.envolvente) {
+    const e = d.envolvente, xs = [1,2,3,4,5,6,7,8].map(k => 'M' + k);
+    const banda = (lo, hi, color, nombre) => ([
+      { x: xs, y: e[lo], type:'scatter', mode:'lines', line:{ width:0 },
+        hoverinfo:'skip', showlegend:false },
+      { x: xs, y: e[hi], type:'scatter', mode:'lines', line:{ width:0 },
+        fill:'tonexty', fillcolor:color, name:nombre,
+        hovertemplate:'%{x}: %{y:.3f}<extra>' + nombre + '</extra>' }
+    ]);
+    Plotly.newPlot('envol', [].concat(
+      banda('p05','p95','rgba(88,166,255,0.10)','90% del tiempo'),
+      banda('p25','p75','rgba(88,166,255,0.20)','50% del tiempo'),
+      [{ x: xs, y: e.p50, type:'scatter', mode:'lines', name:'mediana historica',
+         line:{ color:'#8b949e', width:1.4, dash:'dot' },
+         hovertemplate:'%{x}: %{y:.3f}<extra>mediana</extra>' },
+       { x: xs, y: e.hoy, type:'scatter', mode:'lines+markers', name:'HOY',
+         line:{ color:'#f0883e', width:2.6 }, marker:{ size:7 },
+         text: e.precios_hoy,
+         hovertemplate:'%{x}: %{y:.3f} x M1<br>precio %{text}<extra>HOY</extra>' }]
+    ), Object.assign({}, LAYOUT_BASE, {
+      height:330, xaxis:{ gridcolor:'#21262d', linecolor:'#30363d', type:'category' },
+      yaxis:{ autorange:true, gridcolor:'#21262d', linecolor:'#30363d',
+              title:{ text:'veces M1', font:{ size:11 } }, tickfont:{ size:10 } },
+      yaxis2:{ visible:false }, shapes:[],
+      legend:{ orientation:'h', x:0, y:1.13, font:{ size:10 }, bgcolor:'rgba(0,0,0,0)' }
+    }), { responsive:true, displaylogo:false });
+  }
+
+  // ---- mapa de calor
+  if (d.heat) {
+    Plotly.newPlot('heat', [{
+      z: d.heat.z, x: d.heat.fechas, y: d.heat.pares, type:'heatmap',
+      zmin:0, zmax:100, colorscale:[
+        [0,'#1f4b7a'], [0.2,'#2e5b8c'], [0.45,'#21262d'],
+        [0.55,'#21262d'], [0.8,'#b3454a'], [1,'#f85149']],
+      colorbar:{ thickness:10, len:0.85, tickfont:{ size:9, color:'#8b949e' },
+                 outlinewidth:0 },
+      hovertemplate:'%{y}<br>%{x|%b %Y}<br><b>%{z}</b><extra></extra>'
+    }], Object.assign({}, LAYOUT_BASE, {
+      height:520, margin:{ t:16, r:16, b:34, l:64 }, showlegend:false,
+      xaxis:{ gridcolor:'#21262d', linecolor:'#30363d', type:'date' },
+      yaxis:{ autorange:'reversed',
+              tickfont:{ size:9, family:'ui-monospace,Menlo,monospace' },
+              gridcolor:'#21262d', linecolor:'#30363d' },
+      yaxis2:{ visible:false }, shapes:[]
+    }), { responsive:true, displaylogo:false });
+  }
+
+  // ---- familias extra (convexidad y base) con el mismo formato de panel
+  if (d.meta_extra) {
+    const destinos = { conv:'panes-conv', base:'panes-base' };
+    d.meta_extra.forEach(m => {
+      const cont2 = document.getElementById(destinos[m.fam]);
+      if (!cont2) return;
+      const el = document.createElement('div');
+      el.className = 'pane';
+      el.innerHTML =
+        '<div class="pane-head">' +
+          '<div class="pane-par">' + esc(m.par) +
+            '<span class="sub">desde ' + esc(m.desde || '--') + '</span></div>' +
+          '<div class="pane-kpis">' +
+            '<span class="pane-kpi">mediana<b>' +
+              (m.mediana !== null ? m.mediana : '--') + '</b></span>' +
+            '<span class="zona ' + m.zona + '">' + m.racha + ' dias en ' +
+              zonaTxt[m.zona] + '</span>' +
+            '<span class="pane-now" style="color:' + m.color + '">' +
+              (m.hoy !== null ? Math.round(m.hoy) : '--') + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="plot" id="x-' + m.fam + '-' + m.par + '"></div>';
+      cont2.appendChild(el);
+      const trazas = [];
+      if (d.spx) trazas.push({
+        x: d.fechas, y: d.spx, type:'scattergl', mode:'lines', name:'SPX',
+        yaxis:'y2', line:{ color:'#8b949e', width:1 }, opacity:0.55, connectgaps:false,
+        hovertemplate:'<b>SPX</b>: %{y:,.0f}<extra></extra>' });
+      trazas.push({
+        x: d.fechas, y: d[m.fam][m.par], type:'scattergl', mode:'lines', name:m.par,
+        line:{ color: m.fam === 'conv' ? '#a78bfa' : '#3fb950', width:1.2 },
+        connectgaps:false,
+        hovertemplate:'%{x|%d %b %Y}<br><b>%{y:.1f}</b><extra></extra>' });
+      Plotly.newPlot('x-' + m.fam + '-' + m.par, trazas, LAYOUT_BASE,
+        { responsive:true, displaylogo:false,
+          modeBarButtonsToRemove:['lasso2d','select2d','autoScale2d'] });
+    });
+  }
+
+  document.querySelectorAll('#panes .plot').forEach(p => io.observe(p));
 }
 load();
 </script>
