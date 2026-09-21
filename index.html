@@ -177,19 +177,38 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
 </details>
 
 <details class="sec" data-sec="base">
-  <summary>Base: M1 contra el VIX al contado <span class="cnt">3 paneles</span></summary>
+  <summary>Base: la curva contra el VIX al contado <span class="cnt">1 panel</span></summary>
   <div class="secbody">
-    <div class="note" style="margin-top:6px"><code>BASE_PCT</code> = M1/contado &minus; 1,
-      la base clasica. <code>BASE_DIA</code> = (M1 &minus; contado) / dias hasta
-      vencimiento, la prima por dia de vida que queda: <strong>es exactamente la metrica
-      que alimentaba la alerta M1-SPOT del panel original</strong>, la que estaba muerta
-      porque su celda contenia el texto <code>(disabled)</code> en vez de una formula.
-      Invertidas, como las demas: alto = contado caro respecto al futuro = estres.
-      <br><code>BASE_CM30</code> es la base de un futuro sintetico de <strong>vencimiento
-      constante a 30 dias</strong> (interpolando M1 y M2): es el estandar del sector y la
-      misma ponderacion que ya hacia la celda H25 del panel original. Se incluye como
-      REFERENCIA comparable con el exterior &mdash; la correccion del ciclo la hace el
-      percentil condicional, no esta.</div>
+    <div class="note" style="margin-top:6px">
+      <strong>QUE ES.</strong> En vez de mirar el futuro mas cercano &mdash; que cada dia
+      es un dia mas viejo y acaba muriendo pegado al contado &mdash; se fabrica un futuro
+      <strong>sintetico de 30 dias clavados</strong>, interpolando entre M1 y M2 con el
+      peso <code>(DTE2&minus;30)/(DTE2&minus;DTE1)</code>. Ese sintetico nunca envejece, asi
+      que no tiene roll ni salto mensual. <code>BASE_CM30</code> es lo que ese futuro de 30
+      dias cuesta por encima del VIX al contado.
+      <br><strong>COMO SE LEE.</strong> Va invertida, como el resto del panel.
+      <strong>Cerca de 100</strong>: el contado caro respecto al futuro &mdash;
+      <em>backwardation</em>, panico, el mercado paga por protegerse HOY y no dentro de un
+      mes. <strong>Cerca de 0</strong>: el futuro mucho mas caro que el contado &mdash;
+      <em>contango</em> pronunciado, calma, nadie teme nada a un mes vista. Y como el
+      percentil es condicional, un 95 quiere decir "extremo <strong>para este punto del
+      ciclo mensual</strong>", no extremo en absoluto.
+      <br><strong>POR QUE SOLO ESTA.</strong> Antes habia tres (M1/contado, la misma
+      dividida por los dias que quedaban, y esta). Medidas entre si daban correlacion de
+      <strong>0,85 a 0,94</strong> y coincidian de zona el 78-87% de los dias: eran la
+      misma senal repetida. El desempate fue el dia del roll &mdash; el salto medio de una
+      jornada a otra sube a 18,9 y 19,3 en las dos primeras cuando quedan 2 dias o menos
+      para el vencimiento (un 55-60% mas nerviosas que de costumbre), mientras que esta se
+      queda en <strong>8,5</strong>, mas tranquila incluso que un dia normal. Es la unica
+      inmune, por construccion. Es ademas el estandar del sector, comparable con cualquier
+      indice publicado fuera, y la misma ponderacion que ya hacia la celda H25 del panel
+      original.
+      <br><strong>OJO AL INTERPRETARLA.</strong> La zona alta es relativamente clara: el
+      panico historicamente revierte. La zona baja es <strong>ambigua a proposito</strong>:
+      un contango extremo significa a la vez que el carry de vender volatilidad esta en
+      maximos y que el mercado esta complaciente, que es el estado desde el que saltan los
+      sustos. Son dos lecturas opuestas y cual domina depende del horizonte. Nada de esto
+      esta comprobado todavia sobre estos datos.</div>
     <div id="panes-base"></div>
   </div>
 </details>
@@ -200,7 +219,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   nocturna del domingo, que no es dia de liquidacion). <b>Reescalado de 2007</b>: hasta el
   23-mar-2007 los futuros del VIX cotizaban a diez veces el indice; esta serie arranca despues
   del cambio para no mezclar escalas.</p>
-  <p>Generado el 2026-09-21 14:17 &middot; datos de mercado publicos, sin garantia de exactitud y
+  <p>Generado el 2026-09-21 14:34 &middot; datos de mercado publicos, sin garantia de exactitud y
   sin fin comercial &middot; esto no es asesoramiento de inversion.</p>
 </div>
 

@@ -248,17 +248,21 @@ def series_base(serie, detalle):
     dte = (pd.to_datetime(detalle["VENC_M1"]) - detalle["Fecha"]).dt.days
     dte.index = pd.DatetimeIndex(detalle["Fecha"])
     dte = dte.reindex(serie.index)
-    out = pd.DataFrame(index=serie.index)
-    out["BASE_PCT"] = serie["M1"] / spot - 1.0
-    out["BASE_DIA"] = (serie["M1"] - spot) / dte.where(dte > 0)
-    # Vencimiento constante a 30 dias: se interpola entre M1 y M2 con el peso
-    # (DTE2-30)/(DTE2-DTE1). Es el estandar del sector y ES la misma ponderacion que
-    # ya hacia su propia celda Live!H25. Se deja como serie de REFERENCIA (la
-    # correccion de verdad la hace el percentil condicional, no esta).
+    # SOLO vencimiento constante a 30 dias. Se retiraron BASE_PCT (M1/spot-1) y
+    # BASE_DIA ((M1-spot)/DTE) el 2026-09-21 por REDUNDANTES: medidas entre si daban
+    # r de Pearson 0,85-0,94 y coincidian de zona el 78-87% de los dias, o sea que
+    # eran la misma senal con tres acentos. El desempate fue el comportamiento en el
+    # roll (salto medio de un dia a otro):
+    #     BASE_PCT   18,9 con DTE<=2  vs 12,3 con DTE>5   -> 1,54x mas nerviosa
+    #     BASE_DIA   19,3             vs 12,0             -> 1,61x
+    #     BASE_CM30   8,5             vs 10,1             -> 0,84x (se CALMA)
+    # CM30 es la unica inmune, porque su madurez no cambia nunca. Ademas es el
+    # estandar del sector y la misma ponderacion que ya hacia la celda Live!H25.
     dte2 = (pd.to_datetime(detalle["VENC_M2"]) - detalle["Fecha"]).dt.days
     dte2.index = pd.DatetimeIndex(detalle["Fecha"])
     dte2 = dte2.reindex(serie.index)
     w = ((dte2 - 30) / (dte2 - dte)).clip(0, 1)
+    out = pd.DataFrame(index=serie.index)
     out["BASE_CM30"] = (w * serie["M1"] + (1 - w) * serie["M2"]) / spot - 1.0
     return out
 
@@ -608,19 +612,38 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
 </details>
 
 <details class="sec" data-sec="base">
-  <summary>Base: M1 contra el VIX al contado <span class="cnt">3 paneles</span></summary>
+  <summary>Base: la curva contra el VIX al contado <span class="cnt">1 panel</span></summary>
   <div class="secbody">
-    <div class="note" style="margin-top:6px"><code>BASE_PCT</code> = M1/contado &minus; 1,
-      la base clasica. <code>BASE_DIA</code> = (M1 &minus; contado) / dias hasta
-      vencimiento, la prima por dia de vida que queda: <strong>es exactamente la metrica
-      que alimentaba la alerta M1-SPOT del panel original</strong>, la que estaba muerta
-      porque su celda contenia el texto <code>(disabled)</code> en vez de una formula.
-      Invertidas, como las demas: alto = contado caro respecto al futuro = estres.
-      <br><code>BASE_CM30</code> es la base de un futuro sintetico de <strong>vencimiento
-      constante a 30 dias</strong> (interpolando M1 y M2): es el estandar del sector y la
-      misma ponderacion que ya hacia la celda H25 del panel original. Se incluye como
-      REFERENCIA comparable con el exterior &mdash; la correccion del ciclo la hace el
-      percentil condicional, no esta.</div>
+    <div class="note" style="margin-top:6px">
+      <strong>QUE ES.</strong> En vez de mirar el futuro mas cercano &mdash; que cada dia
+      es un dia mas viejo y acaba muriendo pegado al contado &mdash; se fabrica un futuro
+      <strong>sintetico de 30 dias clavados</strong>, interpolando entre M1 y M2 con el
+      peso <code>(DTE2&minus;30)/(DTE2&minus;DTE1)</code>. Ese sintetico nunca envejece, asi
+      que no tiene roll ni salto mensual. <code>BASE_CM30</code> es lo que ese futuro de 30
+      dias cuesta por encima del VIX al contado.
+      <br><strong>COMO SE LEE.</strong> Va invertida, como el resto del panel.
+      <strong>Cerca de 100</strong>: el contado caro respecto al futuro &mdash;
+      <em>backwardation</em>, panico, el mercado paga por protegerse HOY y no dentro de un
+      mes. <strong>Cerca de 0</strong>: el futuro mucho mas caro que el contado &mdash;
+      <em>contango</em> pronunciado, calma, nadie teme nada a un mes vista. Y como el
+      percentil es condicional, un 95 quiere decir "extremo <strong>para este punto del
+      ciclo mensual</strong>", no extremo en absoluto.
+      <br><strong>POR QUE SOLO ESTA.</strong> Antes habia tres (M1/contado, la misma
+      dividida por los dias que quedaban, y esta). Medidas entre si daban correlacion de
+      <strong>0,85 a 0,94</strong> y coincidian de zona el 78-87% de los dias: eran la
+      misma senal repetida. El desempate fue el dia del roll &mdash; el salto medio de una
+      jornada a otra sube a 18,9 y 19,3 en las dos primeras cuando quedan 2 dias o menos
+      para el vencimiento (un 55-60% mas nerviosas que de costumbre), mientras que esta se
+      queda en <strong>8,5</strong>, mas tranquila incluso que un dia normal. Es la unica
+      inmune, por construccion. Es ademas el estandar del sector, comparable con cualquier
+      indice publicado fuera, y la misma ponderacion que ya hacia la celda H25 del panel
+      original.
+      <br><strong>OJO AL INTERPRETARLA.</strong> La zona alta es relativamente clara: el
+      panico historicamente revierte. La zona baja es <strong>ambigua a proposito</strong>:
+      un contango extremo significa a la vez que el carry de vender volatilidad esta en
+      maximos y que el mercado esta complaciente, que es el estado desde el que saltan los
+      sustos. Son dos lecturas opuestas y cual domina depende del horizonte. Nada de esto
+      esta comprobado todavia sobre estos datos.</div>
     <div id="panes-base"></div>
   </div>
 </details>
