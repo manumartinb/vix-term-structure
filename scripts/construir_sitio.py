@@ -399,6 +399,20 @@ h1 { font-size:18px; margin:0; font-weight:600; }
              border-radius:3px; font-size:12px; color:var(--text); }
 .section-title { max-width:var(--maxw); margin:26px auto 6px auto; font-size:16px; font-weight:700;
                  color:var(--text); border-bottom:2px solid var(--border); padding-bottom:6px; }
+details.sec { max-width:var(--maxw); margin:14px auto 0 auto; }
+details.sec > summary { list-style:none; cursor:pointer; user-select:none;
+  display:flex; align-items:center; gap:10px; font-size:16px; font-weight:700;
+  color:var(--text); border-bottom:2px solid var(--border); padding:8px 2px;
+  background:var(--panel); border-radius:6px 6px 0 0; padding-left:12px; }
+details.sec > summary::-webkit-details-marker { display:none; }
+details.sec > summary::before { content:'\25B6'; font-size:10px; color:var(--muted);
+  transition:transform .15s; display:inline-block; }
+details.sec[open] > summary::before { transform:rotate(90deg); }
+details.sec > summary:hover { color:#58a6ff; }
+details.sec > summary .cnt { margin-left:auto; margin-right:12px; font-size:11px;
+  font-weight:500; color:var(--muted); font-family:ui-monospace,Menlo,monospace; }
+details.sec[open] > summary { border-radius:6px 6px 0 0; }
+.secbody { padding-top:4px; }
 .pane { max-width:var(--maxw); margin:0 auto 14px auto; background:var(--panel);
         border:1px solid var(--border); border-radius:6px; padding:10px 12px 4px 12px; }
 .pane-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px;
@@ -479,41 +493,59 @@ h1 { font-size:18px; margin:0; font-weight:600; }
   exchange lo sirve: <strong>98,77% de coincidencia exacta</strong>.
 </div>
 
-<div class="section-title">La curva de hoy contra su historia</div>
-<div class="note" style="margin-top:6px">Los 8 vencimientos de hoy, <strong>divididos por
-  su propio M1</strong> para quitar el nivel y dejar solo la FORMA (si no, el abanico lo
-  dominaria que el VIX este en 12 o en 80). Detras, donde ha estado esa forma el 90% y el
-  50% del tiempo desde 2007. Si la linea naranja se sale de la banda ancha, la curva de hoy
-  tiene una forma que casi no se ha visto.</div>
-<div class="pane"><div id="envol" class="plot" style="height:330px"></div></div>
+<details class="sec" data-sec="envol">
+  <summary>La curva de hoy contra su historia <span class="cnt">1 grafico</span></summary>
+  <div class="secbody">
+    <div class="note" style="margin-top:6px">Los 8 vencimientos de hoy, <strong>divididos
+      por su propio M1</strong> para quitar el nivel y dejar solo la FORMA (si no, el
+      abanico lo dominaria que el VIX este en 12 o en 80). Detras, donde ha estado esa
+      forma el 90% y el 50% del tiempo desde 2007. Si la linea naranja se sale de la banda
+      ancha, la curva de hoy tiene una forma que casi no se ha visto.</div>
+    <div class="pane"><div id="envol" class="plot" style="height:330px"></div></div>
+  </div>
+</details>
 
-<div class="section-title">Mapa de calor: los 28 pares a lo largo del tiempo</div>
-<div class="note" style="margin-top:6px">Cada fila es un par, el tiempo va de izquierda a
-  derecha. <strong>Rojo = percentil alto</strong> (ese tramo, del reves),
-  <strong>azul = bajo</strong> (contango extremo). Sirve para ver de un vistazo si la curva
-  se rompe ENTERA (manchon vertical rojo: 2008, 2018, 2020) o solo por un tramo. Agregado a
-  semanal para que la rejilla sea manejable.</div>
-<div class="pane"><div id="heat" class="plot" style="height:520px"></div></div>
+<details class="sec" data-sec="heat">
+  <summary>Mapa de calor: los 28 pares a lo largo del tiempo <span class="cnt">1 grafico</span></summary>
+  <div class="secbody">
+    <div class="note" style="margin-top:6px">Cada fila es un par, el tiempo va de izquierda
+      a derecha. <strong>Rojo = percentil alto</strong> (ese tramo, del reves),
+      <strong>azul = bajo</strong> (contango extremo). Sirve para ver de un vistazo si la
+      curva se rompe ENTERA (manchon vertical rojo: 2008, 2018, 2020) o solo por un tramo.
+      Agregado a semanal para que la rejilla sea manejable.</div>
+    <div class="pane"><div id="heat" class="plot" style="height:520px"></div></div>
+  </div>
+</details>
 
-<div class="section-title">Los 28 pares de la curva</div>
-<div id="panes"><div class="err">Cargando...</div></div>
+<details class="sec" data-sec="panes">
+  <summary>Los 28 pares de la curva <span class="cnt">28 paneles</span></summary>
+  <div class="secbody"><div id="panes"></div></div>
+</details>
 
-<div class="section-title">Convexidad: la panza de la curva</div>
-<div class="note" style="margin-top:6px">Curvatura de cada trio de vencimientos
-  consecutivos: <code>P(n) &minus; 2&middot;P(n+1) + P(n+2)</code>. <strong>OJO, esta
-  familia NO va invertida</strong> (se respeta la convencion del panel original):
-  <strong>percentil alto = curva concava</strong>, con el decay a favor del vendedor de
-  front month; <strong>bajo = convexa</strong>, decay en contra.</div>
-<div id="panes-conv"></div>
+<details class="sec" data-sec="conv">
+  <summary>Convexidad: la panza de la curva <span class="cnt">6 paneles</span></summary>
+  <div class="secbody">
+    <div class="note" style="margin-top:6px">Curvatura de cada trio de vencimientos
+      consecutivos: <code>P(n) &minus; 2&middot;P(n+1) + P(n+2)</code>. <strong>OJO, esta
+      familia NO va invertida</strong> (se respeta la convencion del panel original):
+      <strong>percentil alto = curva concava</strong>, con el decay a favor del vendedor de
+      front month; <strong>bajo = convexa</strong>, decay en contra.</div>
+    <div id="panes-conv"></div>
+  </div>
+</details>
 
-<div class="section-title">Base: M1 contra el VIX al contado</div>
-<div class="note" style="margin-top:6px"><code>BASE_PCT</code> = M1/contado &minus; 1, la
-  base clasica. <code>BASE_DIA</code> = (M1 &minus; contado) / dias hasta vencimiento, la
-  prima por dia de vida que queda: <strong>es exactamente la metrica que alimentaba la
-  alerta M1-SPOT del panel original</strong>, la que estaba muerta porque su celda
-  contenia el texto <code>(disabled)</code> en vez de una formula. Invertidas, como las
-  demas: alto = contado caro respecto al futuro = estres.</div>
-<div id="panes-base"></div>
+<details class="sec" data-sec="base">
+  <summary>Base: M1 contra el VIX al contado <span class="cnt">2 paneles</span></summary>
+  <div class="secbody">
+    <div class="note" style="margin-top:6px"><code>BASE_PCT</code> = M1/contado &minus; 1,
+      la base clasica. <code>BASE_DIA</code> = (M1 &minus; contado) / dias hasta
+      vencimiento, la prima por dia de vida que queda: <strong>es exactamente la metrica
+      que alimentaba la alerta M1-SPOT del panel original</strong>, la que estaba muerta
+      porque su celda contenia el texto <code>(disabled)</code> en vez de una formula.
+      Invertidas, como las demas: alto = contado caro respecto al futuro = estres.</div>
+    <div id="panes-base"></div>
+  </div>
+</details>
 
 <div class="footer">
   <p><b>Roll</b>: un contrato deja de ser M1 el mismo dia en que liquida. <b>Dias sin sesion</b>:
@@ -610,12 +642,12 @@ async function load(){
       const trazas = [];
       // El SPX va PRIMERO para que quede por debajo, tenue, como referencia de fondo.
       if (d.spx) trazas.push({
-        x: d.fechas, y: d.spx, type:'scattergl', mode:'lines', name:'SPX',
+        x: d.fechas, y: d.spx, type:'scatter', mode:'lines', name:'SPX',
         yaxis:'y2', line:{ color:'#8b949e', width:1 }, opacity:0.55, connectgaps:false,
         hovertemplate:'<b>SPX</b>: %{y:,.0f}<extra></extra>'
       });
       trazas.push({
-        x: d.fechas, y: d.pares[par], type:'scattergl', mode:'lines', name:par,
+        x: d.fechas, y: d.pares[par], type:'scatter', mode:'lines', name:par,
         line:{ color:'#58a6ff', width:1.2 }, connectgaps:false,
         hovertemplate:'%{x|%d %b %Y}<br><b>%{y:.1f}</b><extra></extra>'
       });
@@ -625,7 +657,21 @@ async function load(){
     });
   }, { rootMargin:'400px 0px' });
 
+  // Cada seccion dibuja sus graficos la PRIMERA vez que se abre. Asi la pagina
+  // carga sin un solo grafico y el navegador no se arrastra con 36 de golpe.
+  const pintores = {};
+  function alAbrir(nombre, fn) { pintores[nombre] = fn; }
+  document.querySelectorAll('details.sec').forEach(det => {
+    det.addEventListener('toggle', () => {
+      if (!det.open || det.dataset.hecho) return;
+      det.dataset.hecho = '1';
+      const fn = pintores[det.dataset.sec];
+      if (fn) fn();
+    });
+  });
+
   // ---- envolvente: forma de hoy contra su abanico historico
+  alAbrir('envol', () => {
   if (d.envolvente) {
     const e = d.envolvente, xs = [1,2,3,4,5,6,7,8].map(k => 'M' + k);
     const banda = (lo, hi, color, nombre) => ([
@@ -654,7 +700,10 @@ async function load(){
     }), { responsive:true, displaylogo:false });
   }
 
+  });
+
   // ---- mapa de calor
+  alAbrir('heat', () => {
   if (d.heat) {
     Plotly.newPlot('heat', [{
       z: d.heat.z, x: d.heat.fechas, y: d.heat.pares, type:'heatmap',
@@ -674,10 +723,14 @@ async function load(){
     }), { responsive:true, displaylogo:false });
   }
 
+  });
+
   // ---- familias extra (convexidad y base) con el mismo formato de panel
+  const pintarFamilia = (fam) => {
   if (d.meta_extra) {
     const destinos = { conv:'panes-conv', base:'panes-base' };
     d.meta_extra.forEach(m => {
+      if (m.fam !== fam) return;
       const cont2 = document.getElementById(destinos[m.fam]);
       if (!cont2) return;
       const el = document.createElement('div');
@@ -699,11 +752,11 @@ async function load(){
       cont2.appendChild(el);
       const trazas = [];
       if (d.spx) trazas.push({
-        x: d.fechas, y: d.spx, type:'scattergl', mode:'lines', name:'SPX',
+        x: d.fechas, y: d.spx, type:'scatter', mode:'lines', name:'SPX',
         yaxis:'y2', line:{ color:'#8b949e', width:1 }, opacity:0.55, connectgaps:false,
         hovertemplate:'<b>SPX</b>: %{y:,.0f}<extra></extra>' });
       trazas.push({
-        x: d.fechas, y: d[m.fam][m.par], type:'scattergl', mode:'lines', name:m.par,
+        x: d.fechas, y: d[m.fam][m.par], type:'scatter', mode:'lines', name:m.par,
         line:{ color: m.fam === 'conv' ? '#a78bfa' : '#3fb950', width:1.2 },
         connectgaps:false,
         hovertemplate:'%{x|%d %b %Y}<br><b>%{y:.1f}</b><extra></extra>' });
@@ -713,7 +766,15 @@ async function load(){
     });
   }
 
-  document.querySelectorAll('#panes .plot').forEach(p => io.observe(p));
+  };
+  alAbrir('conv', () => pintarFamilia('conv'));
+  alAbrir('base', () => pintarFamilia('base'));
+
+  // los 28 paneles: el DOM ya esta puesto; al abrir la seccion se observan y
+  // se dibujan solo los que entran en pantalla
+  alAbrir('panes', () => {
+    document.querySelectorAll('#panes .plot').forEach(p => io.observe(p));
+  });
 }
 load();
 </script>
