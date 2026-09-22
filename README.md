@@ -41,6 +41,36 @@ Un día no se publica hasta que su tramo reúne **100 observaciones comparables*
 Por eso la serie de percentiles arranca más tarde que la de precios, y algunos pares tienen
 huecos sueltos.
 
+## Actualizacion
+
+| Cuando | Que pasa |
+|---|---|
+| Cada 15 min, 15:30-22:15 (Madrid), L-V | Lectura **en vivo**: los 8 vencimientos pedidos en una sola ventana de pocos segundos |
+| 23:00 (Madrid), todos los dias | Corrida **firme**: settlement del dia, percentiles recalculados, panel y CSV regenerados |
+
+Las 23:00 no son arbitrarias: los futuros del VIX liquidan a las 16:15 de Nueva York,
+que son las 22:15 de Madrid, y los dos husos cambian de hora a la vez, asi que el
+margen se mantiene todo el anio.
+
+Si un paso de la corrida nocturna falla, **no se publica nada** y queda constancia en
+`data/estado.json`. Es deliberado: una pagina con el dato de ayer y un aviso es mejor
+que una pagina con un dato inventado y silencio.
+
+### La banda EN VIVO
+
+Durante la sesion, arriba del panel aparece la lectura del momento. Tres cosas que
+conviene entender antes de usarla:
+
+1. **Es provisional.** Se compara contra el historico *cerrado*: el dia de hoy nunca
+   entra en la distribucion que le sirve de vara. El numero firme es el de la noche, y
+   no tiene por que coincidir, porque son dos precios distintos del mismo dia.
+2. **Se dice a que hora se pidio** y cuanto duro la ventana. Los 8 vencimientos se piden
+   de uno en uno, no en paralelo: con 8 peticiones simultaneas el proveedor devuelve
+   "sin datos" para algunas, y ese hueco falso es mucho peor que tardar 4 segundos.
+3. **Cada pata lleva su antiguedad.** M7 y M8 apenas se negocian intradia; cuando su
+   ultima vela pasa de 2 horas se usa el cierre anterior y se dice. Las parejas que
+   dependan de una pata asi salen marcadas con `*` y **no disparan alerta**.
+
 ## Fuentes
 
 - **Abril 2007 → agosto 2018**: archivo público del **Cboe Futures Exchange**, contrato a

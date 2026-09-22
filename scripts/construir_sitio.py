@@ -419,6 +419,19 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
              flex-wrap:wrap; padding:0 2px 6px 2px; }
 .pane-par { font-family:ui-monospace,Menlo,monospace; font-size:15px; font-weight:700; letter-spacing:.3px; }
 .pane-par .sub { color:var(--muted); font-weight:400; font-size:11.5px; margin-left:8px; letter-spacing:0; }
+#vivo { display:none; margin:14px 0 0; padding:10px 14px; border-radius:8px;
+  border:1px solid #2d4a2d; background:#121a12; font-size:12px; }
+#vivo.rancio { border-color:#4a3a1a; background:#1a1710; }
+#vivo .vtit { font-weight:700; letter-spacing:.06em; color:#7ee787; font-size:11px; }
+#vivo.rancio .vtit { color:#d29922; }
+#vivo .vmeta { color:var(--muted); margin-top:3px; }
+#vivo .vpatas { display:flex; gap:10px; flex-wrap:wrap; margin-top:7px; }
+#vivo .vp { border:1px solid var(--line); border-radius:5px; padding:2px 7px;
+  font-variant-numeric:tabular-nums; }
+#vivo .vp b { color:var(--text); }
+#vivo .vp.viejo { border-color:#6e4a1a; color:#d29922; }
+#vivo .vtri { margin-top:8px; font-family:ui-monospace,Consolas,monospace;
+  white-space:pre; font-size:12px; line-height:1.45; }
 .pane-kpis { display:flex; gap:14px; align-items:baseline; flex-wrap:wrap; }
 .pane-kpi { font-size:11px; color:var(--muted); }
 .pane-kpi b { font-size:13px; color:var(--text); font-weight:600; margin-left:4px;
@@ -442,9 +455,9 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   <div>
     <h1>VIX FUTURES &mdash; estructura temporal</h1>
     <div class="subtitle">Los 8 primeros vencimientos de futuros del VIX cruzados entre si
-      (28 pares). Para cada dia, donde queda ese par dentro de <strong>toda su historia
-      previa</strong> &mdash; percentil expanding, sin mirar al futuro. Desde @@DESDE@@,
-      @@NSES@@ sesiones.</div>
+      (28 pares). Para cada dia, donde queda ese par frente a los dias anteriores que
+      estaban <strong>a la misma distancia del vencimiento</strong> &mdash; percentil
+      expanding y condicional, sin mirar al futuro. Desde @@DESDE@@, @@NSES@@ sesiones.</div>
   </div>
   <div class="latest-group">
     <div class="latest">
@@ -463,6 +476,13 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
       <div class="mini">@@MINPAR@@ &middot; lo mas cerca de contango extremo</div>
     </div>
   </div>
+</div>
+
+<div id="vivo">
+  <div class="vtit" id="vtit">EN VIVO</div>
+  <div class="vmeta" id="vmeta"></div>
+  <div class="vpatas" id="vpatas"></div>
+  <div class="vtri" id="vtri"></div>
 </div>
 
 <div class="dl">
@@ -817,6 +837,66 @@ async function load(){
   });
 }
 load();
+</script>
+<script>
+/* Banda EN VIVO. Lee vivo.json, que una tarea reescribe cada 15 min durante la
+   sesion. Si no existe (fuera de mercado, o la tarea parada) la banda no se
+   ensena: es preferible ausencia a un numero viejo con pinta de fresco. */
+(function () {
+  var MAX_VIDA_MIN = 45;   /* pasado esto el propio vivo.json es viejo */
+
+  function pinta(v) {
+    var caja = document.getElementById('vivo');
+    var edadJson = (Date.now() - new Date(v.momento.replace(' ', 'T')).getTime()) / 60000;
+    var rancio = edadJson > MAX_VIDA_MIN;
+    caja.className = rancio ? 'rancio' : '';
+    document.getElementById('vtit').textContent =
+      rancio ? 'ULTIMA LECTURA (no es de ahora mismo)' : 'EN VIVO';
+
+    document.getElementById('vmeta').innerHTML =
+      'Los ' + v.patas_total + ' vencimientos pedidos <strong>a la vez</strong> el ' +
+      v.momento + ', en una ventana de ' + v.ventana_s + ' s. ' +
+      v.patas_en_vivo + ' de ' + v.patas_total + ' con precio del momento. ' +
+      'Comparado contra el historico cerrado hasta el ' + v.historia_hasta +
+      ' (' + v.dte_m1 + ' dias al vencimiento del M1). ' +
+      '<strong>Provisional</strong>: el dato firme es el settlement de esta noche.';
+
+    var h = '';
+    v.patas.forEach(function (p) {
+      var viejo = p.origen !== 'vivo';
+      var det = p.origen === 'vivo' ? (Math.round(p.edad_min) + ' min')
+              : (p.origen === 'cierre_previo' ? 'cierre previo' : 'sin dato');
+      h += '<span class="vp' + (viejo ? ' viejo' : '') + '">' + p.hueco + ' <b>' +
+           (p.precio == null ? '--' : p.precio.toFixed(3)) + '</b> ' + det + '</span>';
+    });
+    document.getElementById('vpatas').innerHTML = h;
+
+    var t = '     ' + [2,3,4,5,6,7,8].map(function (j) {
+      return ('   M' + j).slice(-4); }).join('') + '\n';
+    for (var i = 1; i <= 7; i++) {
+      t += ('M' + i + '   ').slice(0, 4) + ' ';
+      for (var j = 2; j <= 8; j++) {
+        if (j <= i) { t += '    '; continue; }
+        var d = v.pares['M' + j + '/M' + i];
+        if (!d || d.pct == null) { t += '   .'; continue; }
+        var n = String(Math.round(d.pct));
+        t += ('   ' + n + (d.fiable ? '' : '*')).slice(-4);
+      }
+      t += '\n';
+    }
+    document.getElementById('vtri').textContent = t.replace(/\n$/, '');
+    caja.style.display = 'block';
+  }
+
+  function carga() {
+    fetch('vivo.json?t=' + Date.now())
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (v) { if (v) pinta(v); })
+      .catch(function () { /* sin vivo.json no se ensena nada */ });
+  }
+  carga();
+  setInterval(carga, 5 * 60 * 1000);
+})();
 </script>
 </body>
 </html>

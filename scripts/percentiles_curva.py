@@ -82,6 +82,79 @@ def ratios(serie):
     return pd.DataFrame(out, index=serie.index)
 
 
+def _cap(t):
+    """El tramo al que pertenece un DTE. Todo lo que pasa de CAP_DTE cae junto."""
+    return int(min(t, CAP_DTE))
+
+
+def _insertar(listas, valor, tramo):
+    listas.setdefault(tramo, [])
+    bisect.insort(listas[tramo], valor)
+
+
+def _contar(listas, valor, tramo):
+    """(cuantos por debajo, cuantos en total) en la ventana +/- VENTANA_DTE.
+
+    Es LA regla del percentil condicional y vive en un solo sitio: la usan
+    tanto el recorrido historico como la consulta en vivo. Duplicarla seria
+    repetir el bug de la web contra el radar."""
+    menores = total = 0
+    for k in range(tramo - VENTANA_DTE, tramo + VENTANA_DTE + 1):
+        L = listas.get(k)
+        if L:
+            menores += bisect.bisect_left(L, valor)
+            total += len(L)
+    return menores, total
+
+
+def _a_percentil(menores, total, invertir):
+    p = min(1.0, max(0.0, menores / float(total - 1)))
+    return (1.0 - p) * 100.0 if invertir else p * 100.0
+
+
+def vara(valores, dte):
+    """Construye la VARA de una columna: sus listas ordenadas por tramo de DTE.
+
+    Es el mismo estado que percentil_condicional tiene al terminar de recorrer
+    la serie. Se usa para consultar un valor de HOY contra la historia previa
+    sin meterlo dentro (el dato en vivo es provisional: por la noche entra el
+    settlement de verdad y ese si pasa a ser historia)."""
+    listas = {}
+    for v, t in zip(valores, dte):
+        if v is None or (isinstance(v, float) and np.isnan(v)) or np.isnan(t):
+            continue
+        _insertar(listas, v, _cap(t))
+    return listas
+
+
+def consultar(listas, valor, dte, invertir=True):
+    """Donde cae 'valor' dentro de una vara ya construida. NO lo inserta.
+
+    Devuelve (percentil, n_observaciones_comparables). El percentil es None si
+    el tramo no reune MIN_OBS_TRAMO: mejor no dar numero que dar uno flojo."""
+    if valor is None or np.isnan(valor) or dte is None or np.isnan(dte):
+        return None, 0
+    menores, total = _contar(listas, valor, _cap(dte))
+    if total < MIN_OBS_TRAMO:
+        return None, total
+    return _a_percentil(menores, total, invertir), total
+
+
+def varas_matriz(crudos, dte=None):
+    """Una vara por columna a partir de TODA la historia recibida."""
+    if dte is None:
+        dte = cargar_dte(crudos.index)
+    return dict((col, vara(crudos[col].values, dte)) for col in crudos.columns)
+
+
+def consultar_matriz(varas, valores, dte, invertir=True):
+    """Consulta un dia entero (dict columna -> valor crudo) contra las varas.
+
+    Devuelve dict columna -> (percentil o None, n_obs)."""
+    return dict((col, consultar(varas[col], valores.get(col), dte, invertir))
+                for col in varas)
+
+
 def percentil_condicional(valores, dte, invertir=True):
     """Percentil expanding CONDICIONADO a los dias que quedan para el vencimiento.
 
@@ -100,18 +173,11 @@ def percentil_condicional(valores, dte, invertir=True):
     for i, (v, t) in enumerate(zip(valores, dte)):
         if v is None or (isinstance(v, float) and np.isnan(v)) or np.isnan(t):
             continue
-        b = int(min(t, CAP_DTE))
-        menores = total = 0
-        for k in range(b - VENTANA_DTE, b + VENTANA_DTE + 1):
-            L = listas.get(k)
-            if L:
-                menores += bisect.bisect_left(L, v)
-                total += len(L)
+        b = _cap(t)
+        menores, total = _contar(listas, v, b)
         if total >= MIN_OBS_TRAMO:
-            p = min(1.0, max(0.0, menores / float(total - 1)))
-            out[i] = (1.0 - p) * 100.0 if invertir else p * 100.0
-        listas.setdefault(b, [])
-        bisect.insort(listas[b], v)
+            out[i] = _a_percentil(menores, total, invertir)
+        _insertar(listas, v, b)
     return out
 
 
