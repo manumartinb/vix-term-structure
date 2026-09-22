@@ -56,7 +56,10 @@ import sys
 import time
 import datetime as dt
 
+import numpy as np
 import pandas as pd
+
+import estado
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "data")
@@ -124,6 +127,37 @@ def proximo_vencimiento(fecha):
         if m > 12:
             a, m = a + 1, 1
     return pd.Timestamp(vencimiento_teorico(a, m))
+
+
+def escalera_vencimientos(desde, hasta):
+    """Todos los vencimientos mensuales TEORICOS del CFE en el rango, ordenados.
+
+    Es la rejilla contra la que se asignan los huecos M1..M8. Se construye del
+    CALENDARIO, no de los contratos descargados: por eso un contrato que falte
+    deja su hueco vacio en vez de desplazar a los demas."""
+    out = []
+    a, m = desde.year, desde.month
+    while (a, m) <= (hasta.year, hasta.month):
+        out.append(pd.Timestamp(vencimiento_teorico(a, m)))
+        m += 1
+        if m > 12:
+            a, m = a + 1, 1
+    return pd.DatetimeIndex(sorted(out))
+
+
+def anclar_a_escalera(vencimientos, escalera, tol_dias=6):
+    """Ancla cada vencimiento REAL al peldano de calendario que le corresponde.
+
+    Hace falta porque la regla teorica del CFE difiere del vencimiento observado
+    en 1-3 dias en 16 de 264 contratos (festivos). Sin este anclaje, esos 16 se
+    asignarian a un peldano equivocado."""
+    esc = np.array(escalera.view("int64"))
+    out = []
+    for v in pd.DatetimeIndex(vencimientos).view("int64"):
+        i = int(np.abs(esc - v).argmin())
+        dif = abs(esc[i] - v) / 86400000000000.0
+        out.append(escalera[i] if dif <= tol_dias else pd.NaT)
+    return pd.DatetimeIndex(out)
 
 
 def lista_contratos():
@@ -269,10 +303,20 @@ def descargar_tv(nombre):
     return None
 
 
-def obtener_contrato(nombre, anio, mes, codigo, refresh, solo_cboe, dry_run):
-    """Devuelve (DataFrame, fuente). Usa cache en disco si existe."""
+def obtener_contrato(nombre, anio, mes, codigo, refresh, solo_cboe, dry_run,
+                     vivo=False):
+    """Devuelve (DataFrame, fuente).
+
+    REGLA (usuario, 2026-09-21):
+      - contrato VENCIDO  -> cache siempre que exista. Su precio ya no puede
+        cambiar: la cache no es un fallback, es el archivo. Re-descargarlos a
+        diario son ~6 min de trafico inutil y reactiva los 403 de CBOE.
+      - contrato VIVO -> SIEMPRE fresco, sin caer a la cache. Si no se puede
+        bajar, quien llama debe PARAR (no hay dato de hoy y publicar el de ayer
+        como si fuera de hoy es justo lo que mato al sistema anterior).
+    """
     ruta = os.path.join(CACHE, nombre + ".csv")
-    if os.path.exists(ruta) and not refresh:
+    if os.path.exists(ruta) and not refresh and not vivo:
         df = pd.read_csv(ruta)
         df["fecha"] = pd.to_datetime(df["fecha"])
         fuente = df["fuente"].iloc[0] if "fuente" in df.columns and len(df) else "cache"
@@ -321,11 +365,26 @@ def construir(refresh=False, solo_cboe=False, limite=None, dry_run=False):
     trozos = []
     resumen_fuente = {}
     fallidos = []
+    fallidos_vivos = []
+    hoy_ts = pd.Timestamp(dt.date.today())
+    # OBLIGATORIO = el contrato ocupa HOY uno de los huecos M1..M8. Ojo al matiz:
+    # no basta con "aun no ha vencido". Los contratos a mas de 8 meses vista (p.ej.
+    # VXM2027 en sep-2026) el CFE todavia NO los lista, asi que exigirlos frescos
+    # pararia el proceso por una ausencia que no es un fallo. Solo son obligatorios
+    # los que hacen falta para la curva de hoy.
+    _esc_hoy = escalera_vencimientos(hoy_ts, hoy_ts + pd.Timedelta(days=400))
+    _base_hoy = _esc_hoy.searchsorted(hoy_ts, side="right")
     for i, (nombre, a, m, cod, venc_teo) in enumerate(contratos, 1):
-        df, fuente = obtener_contrato(nombre, a, m, cod, refresh, solo_cboe, dry_run)
+        _r = int(_esc_hoy.searchsorted(pd.Timestamp(venc_teo), side="right")) - _base_hoy
+        vivo = 1 <= _r <= N_MESES
+        df, fuente = obtener_contrato(nombre, a, m, cod, refresh, solo_cboe,
+                                      dry_run, vivo=vivo)
         if df is None:
             fallidos.append(nombre)
-            print("  [%3d/%3d] %-10s FALTA" % (i, len(contratos), nombre))
+            if vivo:
+                fallidos_vivos.append(nombre)
+            print("  [%3d/%3d] %-10s FALTA%s"
+                  % (i, len(contratos), nombre, "  <-- VIVO" if vivo else ""))
             continue
         df = df.copy()
         df["contrato"] = nombre
@@ -338,8 +397,17 @@ def construir(refresh=False, solo_cboe=False, limite=None, dry_run=False):
                      df["fecha"].min().date(), df["fecha"].max().date()))
 
     if not trozos:
-        print("No se ha podido descargar ningun contrato.")
-        return None
+        estado.fallar("descarga", "No se ha podido descargar ningun contrato.")
+
+    # PARADA DURA: si falta un contrato VIVO no hay curva correcta que publicar.
+    # Sin fallback a cache y sin escribir nada (decision del usuario 2026-09-21).
+    if fallidos_vivos:
+        estado.fallar(
+            "descarga",
+            "Faltan %d contratos necesarios para la curva de HOY (M1..M8) y no se "
+            "publica nada: %s."
+            % (len(fallidos_vivos), ", ".join(fallidos_vivos)),
+            {"fallidos_vivos": fallidos_vivos, "fallidos_total": len(fallidos)})
 
     largo = pd.concat(trozos, ignore_index=True)
 
@@ -424,8 +492,36 @@ def construir(refresh=False, solo_cboe=False, limite=None, dry_run=False):
     # aparecian 141 dias de desfase, justo los dias de vencimiento.
     largo = largo.sort_values(["fecha", "vencimiento"])
     vivos = largo[largo["vencimiento"] > largo["fecha"]].copy()
-    vivos["rango"] = vivos.groupby("fecha")["vencimiento"].rank(method="first").astype(int)
-    vivos = vivos[vivos["rango"] <= N_MESES]
+
+    # HUECOS POR CALENDARIO (arreglo del bug 1, auditoria 2026-09-21).
+    # Antes: rank(method="first") numeraba densamente lo que hubiera llegado, asi
+    # que un contrato ausente hacia SUBIR UNA POSICION a todos los de detras y se
+    # publicaba una curva mal etiquetada con pinta de correcta (6 de 8 columnas
+    # alteradas al simular la caida de un solo contrato).
+    # Ahora: cada contrato se ancla al peldano de vencimiento que le toca en el
+    # calendario, y su hueco M1..M8 es cuantos peldanos hay entre hoy y el suyo.
+    # Si falta un contrato, su hueco queda VACIO y los demas no se mueven.
+    # El mes de entrega de un contrato lo dice SU PROPIO NOMBRE (VXV2026 = octubre
+    # 2026), no hay que deducirlo de sus datos. La primera version anclaba por el
+    # vencimiento OBSERVADO (la ultima fecha con precio) y eso provocaba 659
+    # colisiones: los contratos poco negociados dejan de imprimir precio semanas
+    # antes de vencer y caian en el peldano del mes anterior, chocando con el
+    # contrato que si le correspondia. Usando `venc_teorico`, que sale del nombre,
+    # dos contratos NUNCA pueden compartir peldano: hay uno por mes.
+    esc = escalera_vencimientos(vivos["fecha"].min(),
+                                vivos["venc_teorico"].max() + pd.Timedelta(days=40))
+    vivos["venc_cal"] = pd.DatetimeIndex(vivos["venc_teorico"])
+    ie = esc.searchsorted(pd.DatetimeIndex(vivos["venc_cal"]), side="right")
+    if_ = esc.searchsorted(pd.DatetimeIndex(vivos["fecha"]), side="right")
+    vivos["rango"] = (ie - if_).astype(int)
+    vivos = vivos[(vivos["rango"] >= 1) & (vivos["rango"] <= N_MESES)]
+    # un mismo hueco no puede tener dos contratos: si pasa, el calendario y los
+    # datos discrepan y es mejor parar que publicar una curva ambigua
+    dup = vivos.duplicated(["fecha", "rango"]).sum()
+    if dup:
+        estado.fallar("pivote",
+                      "%d colisiones fecha/hueco al asignar M1..M8 por calendario."
+                      % dup)
 
     precios = vivos.pivot(index="fecha", columns="rango", values="precio")
     precios.columns = ["M%d" % c for c in precios.columns]
@@ -474,6 +570,11 @@ def main():
     completas = limpio[cols].notna().all(axis=1).sum()
     print("Fechas con los %d meses completos: %d (%.1f%%)"
           % (N_MESES, completas, 100.0 * completas / max(1, len(limpio))))
+    estado.escribir(True, "descarga", "serie construida",
+                    {"sesiones": int(len(limpio)),
+                     "ultima_fecha": str(limpio["Fecha"].max().date()),
+                     "contratos_fallidos": fallidos})
+
     print("\nEscrito:")
     print("  %s" % f_limpio)
     print("  %s" % f_det)
