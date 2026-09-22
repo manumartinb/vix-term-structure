@@ -111,13 +111,58 @@ def tercer_viernes(anio, mes):
     return d + dt.timedelta(days=offset + 14)
 
 
+_HABILES_CFE = None
+
+
+def _habiles_cfe():
+    """Dias habiles del CFE, cacheados. Si el calendario no esta disponible se
+    devuelve None y la regla se queda en su version sin ajustar: es mejor eso
+    que inventarse festivos."""
+    global _HABILES_CFE
+    if _HABILES_CFE is None:
+        try:
+            import pandas_market_calendars as mcal
+            dias = mcal.get_calendar("CFE").valid_days(
+                start_date="2004-01-01", end_date="2030-12-31")
+            _HABILES_CFE = set(pd.DatetimeIndex(dias).tz_localize(None).normalize())
+        except Exception:
+            _HABILES_CFE = False
+    return _HABILES_CFE or None
+
+
 def vencimiento_teorico(anio, mes):
-    """Miercoles 30 dias antes del tercer viernes del mes siguiente (regla CFE)."""
+    """Miercoles 30 dias antes del tercer viernes del mes siguiente (regla CFE),
+    RETROCEDIDO al dia habil anterior si cae en festivo.
+
+    El ajuste no es cosmetico: el 19-jun-2024 fue miercoles y Juneteenth, y el
+    contrato VXM2024 vencio el 18. Sin retroceder, todas las sesiones de ese
+    ciclo llevan el DTE corrido un dia, y desde el percentil condicional el DTE
+    decide contra que tramo de la historia se compara cada dia."""
     if mes == 12:
         a2, m2 = anio + 1, 1
     else:
         a2, m2 = anio, mes + 1
-    return tercer_viernes(a2, m2) - dt.timedelta(days=30)
+    ref = tercer_viernes(a2, m2)
+    hab = _habiles_cfe()
+    if hab:
+        # (1) si el VIERNES DE REFERENCIA es festivo, la referencia es el habil
+        # anterior y los 30 dias se cuentan desde ahi. Este es el ajuste que de
+        # verdad importa y el que faltaba: comprobado contra las fechas que
+        # publica el propio CBOE, el M8 del 21-sep-2026 vence el 18-may-2027 y
+        # no el 19, porque el tercer viernes de junio de 2027 es el 18 y ese dia
+        # se observa Juneteenth (el 19 cae en sabado).
+        for _ in range(7):
+            if pd.Timestamp(ref) in hab:
+                break
+            ref = ref - dt.timedelta(days=1)
+    v = ref - dt.timedelta(days=30)
+    if hab:
+        # (2) y si aun asi el resultado cae en festivo, al habil anterior.
+        for _ in range(7):
+            if pd.Timestamp(v) in hab:
+                break
+            v = v - dt.timedelta(days=1)
+    return v
 
 
 def proximo_vencimiento(fecha):
