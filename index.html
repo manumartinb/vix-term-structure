@@ -37,7 +37,7 @@ details.sec > summary { list-style:none; cursor:pointer; user-select:none;
   color:var(--text); border-bottom:2px solid var(--border); padding:8px 2px;
   background:var(--panel); border-radius:6px 6px 0 0; padding-left:12px; }
 details.sec > summary::-webkit-details-marker { display:none; }
-details.sec > summary::before { content:'B6'; font-size:10px; color:var(--muted);
+details.sec > summary::before { content:'\25B6'; font-size:10px; color:var(--muted);
   transition:transform .15s; display:inline-block; }
 details.sec[open] > summary::before { transform:rotate(90deg); }
 details.sec > summary:hover { color:#58a6ff; }
@@ -249,7 +249,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   nocturna del domingo, que no es dia de liquidacion). <b>Reescalado de 2007</b>: hasta el
   23-mar-2007 los futuros del VIX cotizaban a diez veces el indice; esta serie arranca despues
   del cambio para no mezclar escalas.</p>
-  <p>Generado el 2026-09-22 11:58 &middot; datos de mercado publicos, sin garantia de exactitud y
+  <p>Generado el 2026-09-22 14:37 &middot; datos de mercado publicos, sin garantia de exactitud y
   sin fin comercial &middot; esto no es asesoramiento de inversion.</p>
 </div>
 
@@ -507,23 +507,25 @@ load();
     });
     document.getElementById('vpatas').innerHTML = h;
 
-    var t = '     ' + [2,3,4,5,6,7,8].map(function (j) {
-      return ('   M' + j).slice(-4); }).join('') + '
-';
+    // Los saltos de linea se construyen con fromCharCode(10) y no con el escape
+    // de siempre. Motivo: este JS viaja dentro de una cadena de Python y hasta el
+    // 2026-09-22 ese escape llegaba al navegador convertido en un salto de linea
+    // REAL, con lo que la cadena quedaba sin cerrar y la banda entera no se veia.
+    var NL = String.fromCharCode(10);
+    var filas = ['     ' + [2,3,4,5,6,7,8].map(function (j) {
+      return ('   M' + j).slice(-4); }).join('')];
     for (var i = 1; i <= 7; i++) {
-      t += ('M' + i + '   ').slice(0, 4) + ' ';
+      var fila = ('M' + i + '   ').slice(0, 4) + ' ';
       for (var j = 2; j <= 8; j++) {
-        if (j <= i) { t += '    '; continue; }
+        if (j <= i) { fila += '    '; continue; }
         var d = v.pares['M' + j + '/M' + i];
-        if (!d || d.pct == null) { t += '   .'; continue; }
-        var n = String(Math.round(d.pct));
-        t += ('   ' + n + (d.fiable ? '' : '*')).slice(-4);
+        if (!d || d.pct == null) { fila += '   .'; continue; }
+        var num = String(Math.round(d.pct));
+        fila += ('   ' + num + (d.fiable ? '' : '*')).slice(-4);
       }
-      t += '
-';
+      filas.push(fila);
     }
-    document.getElementById('vtri').textContent = t.replace(/
-$/, '');
+    document.getElementById('vtri').textContent = filas.join(NL);
     caja.style.display = 'block';
   }
 

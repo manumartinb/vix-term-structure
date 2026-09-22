@@ -245,6 +245,41 @@ def mapa_calor(pct, semanas=True):
             "pares": list(pct.columns), "z": z}
 
 
+def comprobar_js(html):
+    """Que el JavaScript de la pagina PARSEE. No es paranoia: el 2026-09-22 la
+    banda EN VIVO estuvo publicada y completamente invisible porque un escape de
+    Python partia una cadena del script en dos. El div estaba, el CSS estaba, el
+    vivo.json se servia -- y no se veia nada, porque el navegador descartaba el
+    script entero en silencio. Comprobar que las piezas existen no es comprobar
+    que funciona.
+
+    Se comprueba ANTES de escribir el fichero, no despues: una pagina rota no
+    debe llegar ni siquiera al disco, porque desde ahi un push manual la
+    publicaria.
+
+    Si falta node se avisa y no se bloquea: no quiero que la publicacion diaria
+    dependa de tener node instalado."""
+    import re
+    import shutil
+    import subprocess
+    nodo = shutil.which("node")
+    if not nodo:
+        print("  (sin node: no se ha podido validar el JavaScript)")
+        return
+    scripts = [x for x in re.findall(r"<script>(.*?)</script>", html, re.S) if x.strip()]
+    for k, sc in enumerate(scripts, 1):
+        tmp = os.path.join(SITIO_DATA, "_check.js")
+        io.open(tmp, "w", encoding="utf-8").write(sc)
+        p = subprocess.run([nodo, "--check", tmp], capture_output=True, text=True)
+        os.remove(tmp)
+        if p.returncode != 0:
+            estado.fallar("sitio/javascript",
+                          "El script %d de %d de la pagina no parsea; no se publica "
+                          "una pagina con el JavaScript roto. %s"
+                          % (k, len(scripts), (p.stderr or "")[:400]))
+    print("  JavaScript validado (%d bloque(s))" % len(scripts))
+
+
 def main():
     os.makedirs(SITIO_DATA, exist_ok=True)
     serie = pcv.cargar_serie()
@@ -377,6 +412,7 @@ def main():
     # ATOMICA: si el proceso muere a mitad de escribir, el index.html que sirve
     # GitHub Pages seria HTML truncado -- una pagina rota, no una pagina vieja.
     # Con tmp + os.replace, o queda la nueva entera o se queda la anterior.
+    comprobar_js(html)
     destino = os.path.join(SITIO, "index.html")
     tmp = destino + ".tmp"
     with io.open(tmp, "w", encoding="utf-8", newline="") as fh:
@@ -398,7 +434,11 @@ def main():
                      "ultimo_dia_panel": str(ultimo.date())})
 
 
-PLANTILLA = u"""<!DOCTYPE html>
+# CADENA CRUDA (r"""): dentro viven CSS y JavaScript, y sus barras invertidas
+# NO son escapes de Python. Sin la r, `content:'\25B6'` (el triangulito de
+# los desplegables) se volvia chr(0o25)+"B6" -- escape OCTAL -- y el JS con un
+# salto de linea escapado llegaba al navegador partido en dos, sin ejecutarse.
+PLANTILLA = r"""<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -907,20 +947,25 @@ load();
     });
     document.getElementById('vpatas').innerHTML = h;
 
-    var t = '     ' + [2,3,4,5,6,7,8].map(function (j) {
-      return ('   M' + j).slice(-4); }).join('') + '\n';
+    // Los saltos de linea se construyen con fromCharCode(10) y no con el escape
+    // de siempre. Motivo: este JS viaja dentro de una cadena de Python y hasta el
+    // 2026-09-22 ese escape llegaba al navegador convertido en un salto de linea
+    // REAL, con lo que la cadena quedaba sin cerrar y la banda entera no se veia.
+    var NL = String.fromCharCode(10);
+    var filas = ['     ' + [2,3,4,5,6,7,8].map(function (j) {
+      return ('   M' + j).slice(-4); }).join('')];
     for (var i = 1; i <= 7; i++) {
-      t += ('M' + i + '   ').slice(0, 4) + ' ';
+      var fila = ('M' + i + '   ').slice(0, 4) + ' ';
       for (var j = 2; j <= 8; j++) {
-        if (j <= i) { t += '    '; continue; }
+        if (j <= i) { fila += '    '; continue; }
         var d = v.pares['M' + j + '/M' + i];
-        if (!d || d.pct == null) { t += '   .'; continue; }
-        var n = String(Math.round(d.pct));
-        t += ('   ' + n + (d.fiable ? '' : '*')).slice(-4);
+        if (!d || d.pct == null) { fila += '   .'; continue; }
+        var num = String(Math.round(d.pct));
+        fila += ('   ' + num + (d.fiable ? '' : '*')).slice(-4);
       }
-      t += '\n';
+      filas.push(fila);
     }
-    document.getElementById('vtri').textContent = t.replace(/\n$/, '');
+    document.getElementById('vtri').textContent = filas.join(NL);
     caja.style.display = 'block';
   }
 
