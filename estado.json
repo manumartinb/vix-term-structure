@@ -1,9 +1,9 @@
 {
   "ok": true,
-  "etapa": "prueba",
-  "detalle": "marca UTC",
-  "momento": "2026-09-22 16:29:01",
-  "momento_utc": "2026-09-22T14:29:01Z",
-  "ultima_ok": "2026-09-22 16:29:01",
-  "ultima_ok_utc": "2026-09-22T14:29:01Z"
+  "etapa": "correr_noche",
+  "detalle": "cadena completa",
+  "momento": "2026-09-22 16:30:53",
+  "momento_utc": "2026-09-22T14:30:53Z",
+  "ultima_ok": "2026-09-22 16:30:53",
+  "ultima_ok_utc": "2026-09-22T14:30:53Z"
 }
