@@ -287,6 +287,19 @@ def settlement_oficial(fecha):
     return df[["vencimiento", "precio"]].reset_index(drop=True)
 
 
+def sesion_liquidada(fecha):
+    """True si la sesion del CFE fechada 'fecha' ya ha liquidado.
+
+    El settlement de los futuros del VIX es a las 16:15 de Nueva York. Se compara
+    en el huso del exchange y no en el local, para que no dependa de donde corra
+    esto ni del cambio de hora (que no cae el mismo dia a los dos lados)."""
+    from zoneinfo import ZoneInfo
+    ny = ZoneInfo("America/New_York")
+    d = pd.Timestamp(fecha)
+    corte = dt.datetime(d.year, d.month, d.day, 16, 15, tzinfo=ny)
+    return dt.datetime.now(ny) >= corte
+
+
 def descargar_tv(nombre):
     """Devuelve DataFrame [fecha, close, settle(NaN)] o None. TradingView, solo Close."""
     try:
@@ -305,6 +318,11 @@ def descargar_tv(nombre):
                     "settle": pd.NA,
                 })
                 out = out[out["close"].fillna(0) > 0]
+                # FUERA la sesion que todavia no ha liquidado. Sin esto, una
+                # corrida a media sesion mete el ultimo precio negociado como si
+                # fuera el cierre oficial, y manana ya es historia: la vara del
+                # percentil queda contaminada con un dato que nunca existio.
+                out = out[[sesion_liquidada(f) for f in out["fecha"]]]
                 if len(out) == 0:
                     return None
                 return out.sort_values("fecha").reset_index(drop=True)
@@ -590,6 +608,23 @@ def main():
     completas = limpio[cols].notna().all(axis=1).sum()
     print("Fechas con los %d meses completos: %d (%.1f%%)"
           % (N_MESES, completas, 100.0 * completas / max(1, len(limpio))))
+
+    # CHIVATO (no filtro): desde sep-2018 el precio viene con 4 decimales porque
+    # es el settlement. Una fila entera con <=2 decimales huele a sesion en curso.
+    # Se avisa y no se tira: un settlement puede acabar en .85 por casualidad.
+    def _dec(x):
+        if pd.isna(x):
+            return -1
+        t = ("%.10f" % float(x)).rstrip("0")
+        return len(t.split(".")[1]) if "." in t else 0
+    reciente = limpio[limpio["Fecha"] >= pd.Timestamp("2018-09-01")]
+    if len(reciente):
+        md = reciente[cols].apply(lambda c: c.map(_dec)).max(axis=1)
+        raras = reciente.loc[md[md <= 2].index, "Fecha"]
+        if len(raras):
+            print("AVISO: %d fila(s) con <=2 decimales desde sep-2018 (posible sesion "
+                  "en curso): %s"
+                  % (len(raras), ", ".join(str(d.date()) for d in raras[-5:])))
     estado.escribir(True, "descarga", "serie construida",
                     {"sesiones": int(len(limpio)),
                      "ultima_fecha": str(limpio["Fecha"].max().date()),
