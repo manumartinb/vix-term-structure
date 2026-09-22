@@ -61,7 +61,14 @@ jobs:
             echo "alarma=si" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          ULTIMA=$(python3 -c "import json;print(json.load(open('estado.json')).get('ultima_ok') or '')")
+          # Se prefiere la marca UTC: este runner va en UTC y estado.json guarda
+          # tambien la hora local de Madrid. Comparar una con otra daba 2 horas de
+          # menos, y en la primera prueba una antiguedad NEGATIVA.
+          ULTIMA=$(python3 -c "
+          import json
+          e = json.load(open('estado.json'))
+          print(e.get('ultima_ok_utc') or e.get('ultima_ok') or '')
+          ")
           if [ -z "$ULTIMA" ]; then
             echo "motivo=estado.json no tiene ultima_ok." >> "$GITHUB_OUTPUT"
             echo "alarma=si" >> "$GITHUB_OUTPUT"
@@ -69,8 +76,13 @@ jobs:
           fi
           HORAS=$(python3 -c "
           import datetime as dt
-          u = dt.datetime.strptime('$ULTIMA', '%Y-%m-%d %H:%M:%S')
-          print(round((dt.datetime.now() - u).total_seconds()/3600, 1))
+          t = '$ULTIMA'
+          if t.endswith('Z'):
+              u = dt.datetime.strptime(t, '%Y-%m-%dT%H:%M:%SZ')
+          else:
+              # marca antigua, en hora local de Madrid: se pasa a UTC a ojo
+              u = dt.datetime.strptime(t, '%Y-%m-%d %H:%M:%S') - dt.timedelta(hours=2)
+          print(round((dt.datetime.utcnow() - u).total_seconds()/3600, 1))
           ")
           echo "Ultima corrida buena: $ULTIMA  (hace $HORAS h)"
           echo "ultima=$ULTIMA" >> "$GITHUB_OUTPUT"

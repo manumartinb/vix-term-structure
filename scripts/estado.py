@@ -80,12 +80,19 @@ def escribir(ok, etapa, detalle="", extra=None):
         except Exception:
             prev = {}
     ahora = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Y la MISMA marca en UTC. Motivo: el vigilante corre en GitHub, cuyo reloj
+    # va en UTC; comparando contra la hora local de Madrid la antiguedad salia
+    # 2 horas corta (y en la primera prueba, directamente NEGATIVA). La hora
+    # local se conserva porque es la que se lee de un vistazo desde aqui.
+    ahora_utc = dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     d = {
         "ok": bool(ok),
         "etapa": etapa,
         "detalle": detalle,
         "momento": ahora,
+        "momento_utc": ahora_utc,
         "ultima_ok": ahora if ok else prev.get("ultima_ok"),
+        "ultima_ok_utc": ahora_utc if ok else prev.get("ultima_ok_utc"),
     }
     if extra:
         d.update(extra)

@@ -1,14 +1,9 @@
 {
   "ok": true,
-  "etapa": "descarga",
-  "detalle": "serie construida",
-  "momento": "2026-09-22 15:20:49",
-  "ultima_ok": "2026-09-20 03:20:04",
-  "sesiones": 4856,
-  "ultima_fecha": "2026-09-21",
-  "contratos_fallidos": [],
-  "aun_no_listados": [
-    "VXN2027"
-  ],
-  "meses_ultimo_dia": 8
+  "etapa": "prueba",
+  "detalle": "marca UTC",
+  "momento": "2026-09-22 16:29:01",
+  "momento_utc": "2026-09-22T14:29:01Z",
+  "ultima_ok": "2026-09-22 16:29:01",
+  "ultima_ok_utc": "2026-09-22T14:29:01Z"
 }
