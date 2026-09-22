@@ -47,7 +47,7 @@ CONFIG = os.path.join(HERE, "telegram_config.json")
 # umbrales heredados del Apps Script del VIX Studio
 UMBRAL_ALTO = 95.0
 UMBRAL_BAJO = 5.0
-# para las rachas se usa un listón mas bajo: lo interesante no es solo el extremo
+# para las rachas se usa un liston mas bajo: lo interesante no es solo el extremo
 # puntual, es llevar semanas apoyado en una banda
 RACHA_ALTO = 90.0
 RACHA_BAJO = 10.0
@@ -57,6 +57,7 @@ DIAS_RANCIO = 4            # si el ultimo dato es mas viejo, se avisa
 DIAS_HISTORIA_RACHA = 120  # cuantos dias hacia atras se recalculan para las rachas
 MAX_DETALLE = 5            # mas de esto en la misma categoria -> se resume en 1 linea
 N_PAREJAS = 28
+N_MESES_SERIE = 8
 
 
 def serie_percentiles(r, n_dias):
@@ -162,13 +163,32 @@ def construir_mensaje(fecha=None):
     partes = []
     partes.append("<b>RADAR CURVA VIX</b> - %s" % f.strftime("%d %b %Y"))
 
-    # aviso de frescura: solo tiene sentido en el mensaje del dia. Al reconstruir un
-    # dia del pasado con --fecha, el dato es viejo A PROPOSITO y avisar seria ruido.
-    atraso = (pd.Timestamp(dt.date.today()) - f).days
-    if fecha is None and atraso > DIAS_RANCIO:
+    # DOS avisos distintos, que antes estaban confundidos en uno solo:
+    #   A) la SERIE no avanza -> la descarga no corre
+    #   B) la serie avanza pero al ultimo dia le faltan vencimientos
+    # El caso B era invisible: el informe retrocedia al ultimo dia completo y
+    # salia con pinta de normal. Al reconstruir el pasado con --fecha no aplica
+    # ninguno de los dos: ahi el dato es viejo a proposito.
+    if fecha is None:
+        ultima = serie.index[-1]
+        atraso = (pd.Timestamp(dt.date.today()) - ultima).days
+        if atraso > DIAS_RANCIO:
+            partes.append("")
+            partes.append("<b>AVISO: la serie no avanza desde hace %d dias</b> "
+                          "(ultimo dia %s). Puede que la descarga no este corriendo."
+                          % (atraso, ultima.strftime("%d-%b")))
+        if f != ultima:
+            partes.append("")
+            partes.append("<b>AVISO: se informa del %s, no del %s.</b> Al ultimo dia "
+                          "no le salen percentiles todavia."
+                          % (f.strftime("%d-%b"), ultima.strftime("%d-%b")))
+
+    faltan = [c for c in serie.columns if pd.isna(serie.loc[f, c])]
+    if faltan:
         partes.append("")
-        partes.append("<b>AVISO: el ultimo dato es de hace %d dias.</b> "
-                      "Puede que la descarga no este corriendo." % atraso)
+        partes.append("<b>AVISO: al %s le faltan %s.</b> Las parejas que dependen de "
+                      "ellos salen como '.' y no se han evaluado."
+                      % (f.strftime("%d-%b"), ", ".join(faltan)))
 
     lineas = titular(pcts, hist_pcts)
     partes.append("")
@@ -183,7 +203,10 @@ def construir_mensaje(fecha=None):
     partes.append("<pre>" + pcv.pintar(pcts) + "</pre>")
 
     curva = serie.loc[f].dropna()
-    partes.append("Curva: " + "  ".join("%.4g" % v for v in curva.values))
+    partes.append("Curva (%s): %s"
+                  % ("M1-M%d" % len(curva) if len(curva) == N_MESES_SERIE
+                     else "%d de %d meses" % (len(curva), N_MESES_SERIE),
+                     "  ".join("%.4g" % v for v in curva.values)))
     partes.append("Historia: %d dias%s. 100 = backwardation, 0 = contango."
                   % (n_hist, " desde abr-2007"))
     return "\n".join(partes)

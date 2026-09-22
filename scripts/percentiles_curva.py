@@ -21,7 +21,7 @@ CONVENCION (heredada del VIX Studio, se respeta para poder comparar):
 PERCENTIL CONDICIONAL POR DIAS A VENCIMIENTO
 Cada dia se compara SOLO contra dias anteriores que estaban a una distancia
 parecida del vencimiento del front month (DTE +/- VENTANA_DTE). Sin esto el
-percentil medía el calendario y no el mercado: como M1 converge al contado segun
+percentil media el calendario y no el mercado: como M1 converge al contado segun
 vence, la base promediaba percentil 27 a 3 dias del roll y 61 a 30 dias (33,9
 puntos de sesgo mecanico) y los pares con M1 arrastraban 13,0. Con la correccion
 el sesgo real medido baja a 5,7 y 3,5.
@@ -192,22 +192,29 @@ def matriz_percentiles(crudos, dte=None, invertir=True):
     return out
 
 
-def triangulo(serie, fecha=None, corte=None, dte=None):
+def triangulo(serie, fecha=None, corte=None, dte=None, min_pares=1):
     """Percentiles (0-100, convencion invertida) de las 28 parejas en 'fecha'.
 
     corte: la historia de referencia se trunca en esa fecha (para simular una
     vara congelada). Devuelve (fecha, Series, n_dias_historia, ratios_de_ese_dia).
+
+    SIN FECHA se coge el ULTIMO dia que tenga al menos `min_pares` parejas, NO
+    el ultimo dia completo. Antes se exigian las 28 y el resultado era que un
+    dia al que le faltaba un vencimiento hacia RETROCEDER el informe al dia
+    anterior sin decirlo: el mensaje salia con aspecto normal y fecha vieja.
+    Quien llama debe comparar la fecha devuelta con serie.index[-1] y avisar si
+    difieren. Un hueco se ensena, no se esquiva.
     """
     r = ratios(serie)
-    if corte is not None:
-        pass  # el corte se aplica abajo, sobre el indice, no sobre el calculo
     pct = matriz_percentiles(r if corte is None else r[r.index <= pd.Timestamp(corte)],
                              dte=dte if corte is None else None)
-    completos = pct.dropna()
     if fecha is None:
-        if len(completos) == 0:
-            raise SystemExit("No hay ninguna fecha con las 28 parejas completas.")
-        fecha = completos.index[-1]
+        n_val = pct.notna().sum(axis=1)
+        cand = n_val[n_val >= int(min_pares)]
+        if len(cand) == 0:
+            raise SystemExit("Ninguna fecha alcanza %d parejas con percentil."
+                             % int(min_pares))
+        fecha = cand.index[-1]
     fecha = pd.Timestamp(fecha)
     if fecha not in pct.index:
         raise SystemExit("La fecha %s no esta en la serie." % fecha.date())

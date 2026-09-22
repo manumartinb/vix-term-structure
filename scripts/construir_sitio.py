@@ -505,7 +505,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   <br><strong>CORRECCION POR DIAS A VENCIMIENTO (importante para leerlo bien)</strong>: el
   percentil NO se calcula contra toda la historia mezclada, sino <strong>solo contra los
   dias que estaban en el mismo punto del ciclo mensual</strong> (mismos dias hasta el
-  vencimiento del front month, ventana &plusmn;2). Sin esto el panel medía el calendario y
+  vencimiento del front month, ventana &plusmn;2). Sin esto el panel media el calendario y
   no el mercado: como M1 converge al contado segun se acerca su vencimiento, la base
   promediaba percentil 27 a 3 dias del roll y 61 a 30 dias &mdash; <strong>33,9 puntos de
   sesgo puramente mecanico</strong>, y los pares con M1 arrastraban 13,0. Con la correccion

@@ -78,7 +78,12 @@ FECHA_INICIO = pd.Timestamp("2007-04-01")
 
 # primer y ultimo contrato a intentar (J07 = primer contrato que vence tras FECHA_INICIO)
 PRIMER_ANIO, PRIMER_MES = 2007, 4
-ULTIMO_ANIO, ULTIMO_MES = 2027, 7      # margen para cubrir M8 desde hoy
+# El horizonte NO se clava a una fecha: se deriva del calendario en cada corrida.
+# Estuvo fijo en 2027-07 y eso tiene dos caras, las dos malas: hoy sobran dos
+# contratos que el CFE aun no lista (y "fallan" en cada corrida), y a partir de
+# sep-2027 se habria quedado CORTO, perdiendo el tramo largo de la curva sin que
+# nadie se enterara. Una fecha fija dentro de un sistema que rueda se pudre sola.
+MARGEN_MESES = 2       # se intentan 2 vencimientos mas alla de M8, por adelantado
 
 # frontera medida el 2026-09-21: el archivo CDN de CBOE llega hasta Q18 (ago-2018)
 CBOE_HASTA = (2018, 8)
@@ -162,9 +167,15 @@ def anclar_a_escalera(vencimientos, escalera, tol_dias=6):
 
 def lista_contratos():
     """[(nombre, anio, mes, codigo, vencimiento_teorico), ...] en orden cronologico."""
+    hoy = pd.Timestamp(dt.date.today())
+    esc = escalera_vencimientos(hoy, hoy + pd.Timedelta(days=900))
+    base = int(esc.searchsorted(hoy, side="right"))
+    tope = esc[base + N_MESES - 1 + MARGEN_MESES]
+    ua, um = tope.year, tope.month
+
     out = []
     a, m = PRIMER_ANIO, PRIMER_MES
-    while (a, m) <= (ULTIMO_ANIO, ULTIMO_MES):
+    while (a, m) <= (ua, um):
         cod = CODIGOS[m - 1]
         out.append(("VX%s%04d" % (cod, a), a, m, cod, vencimiento_teorico(a, m)))
         m += 1
@@ -366,6 +377,7 @@ def construir(refresh=False, solo_cboe=False, limite=None, dry_run=False):
     resumen_fuente = {}
     fallidos = []
     fallidos_vivos = []
+    no_listados = []       # mas alla de M8: el exchange aun no los ha sacado
     hoy_ts = pd.Timestamp(dt.date.today())
     # OBLIGATORIO = el contrato ocupa HOY uno de los huecos M1..M8. Ojo al matiz:
     # no basta con "aun no ha vencido". Los contratos a mas de 8 meses vista (p.ej.
@@ -380,11 +392,16 @@ def construir(refresh=False, solo_cboe=False, limite=None, dry_run=False):
         df, fuente = obtener_contrato(nombre, a, m, cod, refresh, solo_cboe,
                                       dry_run, vivo=vivo)
         if df is None:
-            fallidos.append(nombre)
-            if vivo:
-                fallidos_vivos.append(nombre)
-            print("  [%3d/%3d] %-10s FALTA%s"
-                  % (i, len(contratos), nombre, "  <-- VIVO" if vivo else ""))
+            if _r > N_MESES:
+                # por delante de la curva util: se intenta por adelantado para
+                # cogerlo el dia que el CFE lo liste, y que no este es lo normal.
+                no_listados.append(nombre)
+            else:
+                fallidos.append(nombre)
+                if vivo:
+                    fallidos_vivos.append(nombre)
+                print("  [%3d/%3d] %-10s FALTA%s"
+                      % (i, len(contratos), nombre, "  <-- VIVO" if vivo else ""))
             continue
         df = df.copy()
         df["contrato"] = nombre
@@ -532,7 +549,7 @@ def construir(refresh=False, solo_cboe=False, limite=None, dry_run=False):
     detalle = precios.join(vencs).reset_index().rename(columns={"fecha": "Fecha"})
     detalle["N_CONTRATOS"] = precios.notna().sum(axis=1).values
 
-    return largo, limpio, detalle, fallidos, resumen_fuente
+    return largo, limpio, detalle, fallidos, resumen_fuente, no_listados
 
 
 def main():
@@ -548,7 +565,7 @@ def main():
     r = construir(refresh=refresh, solo_cboe=solo_cboe, limite=limite, dry_run=dry_run)
     if r is None:
         return
-    largo, limpio, detalle, fallidos, resumen_fuente = r
+    largo, limpio, detalle, fallidos, resumen_fuente, no_listados = r
 
     f_largo = os.path.join(DATA, "vix_contratos_largo.csv")
     f_limpio = os.path.join(DATA, "vix_futuros_M1_M8.csv")
@@ -563,6 +580,9 @@ def main():
     print("Contratos por fuente: %s" % resumen_fuente)
     if fallidos:
         print("Contratos NO descargados (%d): %s" % (len(fallidos), ", ".join(fallidos)))
+    if no_listados:
+        print("Aun no listados por el exchange (%d, normal): %s"
+              % (len(no_listados), ", ".join(no_listados)))
     print("Filas en formato largo: %d" % len(largo))
     print("Fechas en la serie M1..M8: %d  (%s -> %s)"
           % (len(limpio), limpio["Fecha"].min().date(), limpio["Fecha"].max().date()))
@@ -573,7 +593,10 @@ def main():
     estado.escribir(True, "descarga", "serie construida",
                     {"sesiones": int(len(limpio)),
                      "ultima_fecha": str(limpio["Fecha"].max().date()),
-                     "contratos_fallidos": fallidos})
+                     "contratos_fallidos": fallidos,
+                     "aun_no_listados": no_listados,
+                     "meses_ultimo_dia": int(limpio.iloc[-1][
+                         [c for c in limpio.columns if c.startswith("M")]].notna().sum())})
 
     print("\nEscrito:")
     print("  %s" % f_limpio)
