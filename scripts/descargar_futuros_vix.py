@@ -84,6 +84,8 @@ PRIMER_ANIO, PRIMER_MES = 2007, 4
 # sep-2027 se habria quedado CORTO, perdiendo el tramo largo de la curva sin que
 # nadie se enterara. Una fecha fija dentro de un sistema que rueda se pudre sola.
 MARGEN_MESES = 2       # se intentan 2 vencimientos mas alla de M8, por adelantado
+TOL_COLA = 5           # dias: si un contrato VENCIDO acaba antes de esto de su
+                       # vencimiento, su fichero esta truncado y se completa
 
 # frontera medida el 2026-09-21: el archivo CDN de CBOE llega hasta Q18 (ago-2018)
 CBOE_HASTA = (2018, 8)
@@ -412,6 +414,24 @@ def obtener_contrato(nombre, anio, mes, codigo, refresh, solo_cboe, dry_run,
         df = descargar_cboe(codigo, anio)
         if df is not None:
             fuente = "CBOE"
+            # El archivo de CBOE esta TRUNCADO para los contratos de marzo a
+            # agosto de 2018: los seis acaban el 2018-02-23. Sin esto, medio ano
+            # se quedaba sin M1..M6 y la serie no protestaba, solo dejaba huecos.
+            venc = pd.Timestamp(vencimiento_teorico(anio, mes))
+            ya_vencido = venc < pd.Timestamp(dt.date.today())
+            corte = df["fecha"].max()
+            if ya_vencido and (venc - corte).days > TOL_COLA and not solo_cboe:
+                cola = descargar_tv(nombre)
+                if cola is not None:
+                    cola = cola[cola["fecha"] > corte]
+                    if len(cola):
+                        df = pd.concat([df, cola], ignore_index=True)
+                        df = df.sort_values("fecha").reset_index(drop=True)
+                        fuente = "CBOE+TV"
+                        print("      %s: CBOE cortaba el %s y el vencimiento es el "
+                              "%s -> +%d dias de TradingView"
+                              % (nombre, corte.date(), venc.date(), len(cola)))
+                time.sleep(PAUSA_TV)
     if df is None and not solo_cboe:
         df = descargar_tv(nombre)
         if df is not None:
