@@ -19,8 +19,8 @@ ratio de ese dia dentro de TODA su historia previa (sin mirar al futuro).
 Convencion heredada del VIX Studio:
   100 = backwardation extrema (curva del reves)   0 = contango extremo
 
-Los primeros MIN_HISTORIA dias no se publican: un percentil contra 20
-observaciones no significa nada.
+Un dia no se publica hasta que su tramo de DTE junta MIN_OBS_TRAMO observaciones
+comparables (el umbral vive en percentiles_curva.py).
 
 RENDIMIENTO: 28 graficos Plotly de ~4.900 puntos no se pintan de golpe. Se
 dibujan bajo demanda con IntersectionObserver segun entran en pantalla.
@@ -42,76 +42,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SITIO = os.path.join(HERE, "sitio")
 SITIO_DATA = os.path.join(SITIO, "data")
 
-MIN_HISTORIA = 250
 UMB_ALTO, UMB_BAJO = 95.0, 5.0
 
-# --- correccion por dias a vencimiento (DTE), decidida el 2026-09-21 ---
-# El percentil GLOBAL medía el calendario, no el mercado: la base promediaba 27 a
-# 1-3 dias del vencimiento y 61 a 22-40 (33,9 puntos de sesgo), y M2/M1 13,0.
-# El percentil CONDICIONAL -- comparar cada dia SOLO contra dias historicos que
-# estaban en el mismo punto del ciclo -- deja ese sesgo en 0,4 y 0,8. Medido contra
-# las otras dos alternativas (residuo: 4,4 / vencimiento constante: 3,3), gana.
-VENTANA_DTE = 2      # +/-2 dias. Medido: +/-1 da 0,30 y +/-2 da 0,43 (bien);
-                     # +/-3 se va a 5,69 y +/-5 a 16,83. Mas ancho corrige poco.
-CAP_DTE = 30         # todo lo de >30 dias cae en el mismo tramo. OBLIGATORIO: hay
-                     # 153 valores distintos de DTE y 128 con menos de 50 casos; sin
-                     # acotar, la serie no arrancaria hasta oct-2019 (-3.033 dias).
-MIN_OBS_TRAMO = 100  # observaciones previas dentro de la ventana antes de publicar
+# Los parametros del percentil condicional (ventana, cap, minimo) viven en
+# percentiles_curva.py: es la UNICA fuente del calculo.
 
 VERDE, AMBAR, ROJO, AZUL = "#3fb950", "#d29922", "#f85149", "#58a6ff"
-
-
-def percentil_expanding(valores):
-    """Percentil (0-100, invertido) de cada valor contra TODOS los anteriores.
-    Lista ordenada incremental: O(n log n), no O(n^2)."""
-    orden = []
-    out = np.full(len(valores), np.nan)
-    for i, v in enumerate(valores):
-        if not np.isnan(v):
-            if len(orden) >= MIN_HISTORIA:
-                if v < orden[0]:
-                    p = 0.0
-                elif v > orden[-1]:
-                    p = 1.0
-                else:
-                    p = bisect.bisect_left(orden, v) / float(len(orden) - 1)
-                out[i] = (1.0 - p) * 100.0
-            bisect.insort(orden, v)
-    return out
-
-
-def percentil_condicional(valores, dte, invertir=True):
-    """Percentil expanding CONDICIONADO a los dias que quedan para el vencimiento.
-
-    Para el dia t se compara su valor SOLO contra los dias ANTERIORES que estaban a
-    una distancia parecida del vencimiento (DTE +/- VENTANA_DTE). Asi un dato de
-    "quedan 2 dias" se juzga contra otros dias-2, no contra dias-30, que es lo que
-    hacia que el panel marcase extremos falsos en cada roll.
-
-    Implementacion: una lista ordenada por DTE exacto; la consulta suma los conteos
-    de las 2*VENTANA+1 listas de la ventana. Exacto y O(n log n).
-
-    invertir=True aplica el 1-p de la convencion del VIX Studio (100 = del reves).
-    La convexidad va con invertir=False, como en su hoja."""
-    listas = {}
-    out = np.full(len(valores), np.nan)
-    for i, (v, t) in enumerate(zip(valores, dte)):
-        if np.isnan(v) or np.isnan(t):
-            continue
-        b = int(min(t, CAP_DTE))
-        menores = total = 0
-        for k in range(b - VENTANA_DTE, b + VENTANA_DTE + 1):
-            L = listas.get(k)
-            if L:
-                menores += bisect.bisect_left(L, v)
-                total += len(L)
-        if total >= MIN_OBS_TRAMO:
-            p = menores / float(total - 1)
-            p = min(1.0, max(0.0, p))
-            out[i] = (1.0 - p) * 100.0 if invertir else p * 100.0
-        listas.setdefault(b, [])
-        bisect.insort(listas[b], v)
-    return out
 
 
 def color_pct(v):
@@ -312,10 +248,8 @@ def main():
     dte_v = dte_s.values.astype(float)
 
     print("Percentil CONDICIONAL por DTE (+/-%d, cap %d) de %d pares sobre %d sesiones..."
-          % (VENTANA_DTE, CAP_DTE, len(r.columns), len(r)))
-    pct = pd.DataFrame(index=r.index)
-    for col in r.columns:
-        pct[col] = percentil_condicional(r[col].values, dte_v)
+          % (pcv.VENTANA_DTE, pcv.CAP_DTE, len(r.columns), len(r)))
+    pct = pcv.matriz_percentiles(r, dte_v)
 
     # --- familias que faltaban (recuperadas del VIX Studio) ---
     conv_raw = series_convexidad(serie)
@@ -325,10 +259,10 @@ def main():
     conv = pd.DataFrame(index=serie.index)
     for c in conv_raw.columns:
         # SIN invertir: en el VIX Studio la convexidad no lleva el 1-p
-        conv[c] = percentil_condicional(conv_raw[c].values, dte_v, invertir=False)
+        conv[c] = pcv.percentil_condicional(conv_raw[c].values, dte_v, invertir=False)
     base = pd.DataFrame(index=serie.index)
     for c in base_raw.columns:
-        base[c] = percentil_condicional(base_raw[c].values, dte_v)   # invertida, como U4
+        base[c] = pcv.percentil_condicional(base_raw[c].values, dte_v)   # invertida, como U4
 
     completos = pct.dropna()
     ultimo = completos.index[-1] if len(completos) else pct.dropna(how="all").index[-1]
@@ -416,7 +350,6 @@ def main():
         "@@CURVA@@": " &middot; ".join("%.4g" % v for v in curva.values),
         "@@MAXPAR@@": validos.idxmax(), "@@MAXVAL@@": "%d" % round(validos.max()),
         "@@MINPAR@@": validos.idxmin(), "@@MINVAL@@": "%d" % round(validos.min()),
-        "@@MINHIST@@": str(MIN_HISTORIA),
     }
     html = PLANTILLA
     for k, v in reemplazos.items():
