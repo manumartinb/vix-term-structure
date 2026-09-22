@@ -257,7 +257,12 @@ def main():
 
     texto = construir_mensaje(fecha=opt("--fecha"))
     if "--enviar" in args:
-        enviar(texto)
+        # Codigo de salida != 0 si no se envio. Antes salia 0 pasara lo que
+        # pasara, asi que la cadena nocturna daba el paso por bueno y el unico
+        # sintoma era un mensaje que no llegaba: silencio, indistinguible de
+        # "hoy no habia nada que contar".
+        if not enviar(texto):
+            sys.exit(1)
     else:
         print(texto)
         print()

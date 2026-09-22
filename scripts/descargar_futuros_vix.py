@@ -210,6 +210,14 @@ def anclar_a_escalera(vencimientos, escalera, tol_dias=6):
     return pd.DatetimeIndex(out)
 
 
+def csv_atomico(df, ruta, **kw):
+    """to_csv que no puede dejar un fichero a medias: se escribe al lado y se
+    renombra. os.replace es atomico dentro del mismo volumen, tambien en Windows."""
+    tmp = ruta + ".tmp"
+    df.to_csv(tmp, **kw)
+    os.replace(tmp, ruta)
+
+
 def lista_contratos():
     """[(nombre, anio, mes, codigo, vencimiento_teorico), ...] en orden cronologico."""
     hoy = pd.Timestamp(dt.date.today())
@@ -414,7 +422,7 @@ def obtener_contrato(nombre, anio, mes, codigo, refresh, solo_cboe, dry_run,
         return None, None
 
     df["fuente"] = fuente
-    df.to_csv(ruta, index=False)
+    csv_atomico(df, ruta, index=False)
     return df, fuente
 
 
@@ -634,10 +642,10 @@ def main():
     f_limpio = os.path.join(DATA, "vix_futuros_M1_M8.csv")
     f_det = os.path.join(DATA, "vix_futuros_M1_M8_detalle.csv")
 
-    largo[["fecha", "contrato", "vencimiento", "close", "settle", "fuente"]].to_csv(
-        f_largo, index=False)
-    limpio.to_csv(f_limpio, index=False)
-    detalle.to_csv(f_det, index=False)
+    csv_atomico(largo[["fecha", "contrato", "vencimiento", "close", "settle",
+                       "fuente"]], f_largo, index=False)
+    csv_atomico(limpio, f_limpio, index=False)
+    csv_atomico(detalle, f_det, index=False)
 
     print("\n" + "=" * 70)
     print("Contratos por fuente: %s" % resumen_fuente)

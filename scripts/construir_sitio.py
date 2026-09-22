@@ -29,6 +29,7 @@ Reglas tecnicas del proyecto: ASCII, cp1252.
 """
 
 import os
+import io
 import json
 import bisect
 import datetime as dt
@@ -36,7 +37,14 @@ import datetime as dt
 import numpy as np
 import pandas as pd
 
+import estado
 import percentiles_curva as pcv
+from descargar_futuros_vix import csv_atomico
+
+# Lo que no se ha podido conseguir en esta corrida. Se pinta en la pagina y se
+# guarda en estado.json: una pagina degradada tiene que parecer degradada.
+DEGRADACIONES = []
+
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITIO = os.path.join(HERE, "sitio")
@@ -107,11 +115,12 @@ def cargar_spx(fechas):
             spx = cl.dropna()
             spx.name = "SPX"
             os.makedirs(SITIO_DATA, exist_ok=True)
-            spx.rename_axis("Fecha").to_frame("SPX").to_csv(cache)
+            csv_atomico(spx.rename_axis("Fecha").to_frame("SPX"), cache)
             print("  SPX descargado (%d dias, hasta %s)" % (len(spx), spx.index.max().date()))
         except Exception as e:
             print("  AVISO: no se pudo obtener el SPX (%s). Los graficos iran sin fondo."
                   % str(e)[:70])
+            DEGRADACIONES.append("Sin el SPX de fondo (%s)." % str(e)[:60])
             return None
     # alineado a las fechas del panel; ffill para festivos propios de cada mercado
     ali = spx.reindex(pd.DatetimeIndex(fechas)).ffill()
@@ -161,10 +170,13 @@ def cargar_vix_spot(fechas):
             cl.index = pd.to_datetime(cl.index).tz_localize(None).normalize()
             spot = cl.dropna()
             spot.name = "VIX"
-            spot.rename_axis("Fecha").to_frame("VIX").to_csv(cache)
+            csv_atomico(spot.rename_axis("Fecha").to_frame("VIX"), cache)
             print("  VIX spot descargado (%d dias)" % len(spot))
         except Exception as e:
             print("  AVISO: sin VIX al contado (%s)" % str(e)[:60])
+            DEGRADACIONES.append("Sin el VIX al contado: la seccion de la base "
+                                 "(BASE_CM30) no se ha podido calcular (%s)."
+                                 % str(e)[:60])
             return None
     return spot.reindex(pd.DatetimeIndex(fechas)).ffill()
 
@@ -270,9 +282,10 @@ def main():
     curva = serie.loc[ultimo].dropna()
 
     # ---- ficheros de descarga
-    serie.reset_index().to_csv(os.path.join(SITIO_DATA, "vix_futuros_M1_M8.csv"), index=False)
-    pct.round(2).reset_index().to_csv(
-        os.path.join(SITIO_DATA, "vix_percentiles_pares.csv"), index=False)
+    csv_atomico(serie.reset_index(),
+                os.path.join(SITIO_DATA, "vix_futuros_M1_M8.csv"), index=False)
+    csv_atomico(pct.round(2).reset_index(),
+                os.path.join(SITIO_DATA, "vix_percentiles_pares.csv"), index=False)
 
     # ---- data.json que consume la pagina
     fechas = [d.strftime("%Y-%m-%d") for d in pct.index]
@@ -338,8 +351,10 @@ def main():
         "envolvente": env,
         "heat": mapa_calor(pct),
     }
-    with open(os.path.join(SITIO, "data.json"), "w", encoding="utf-8") as fh:
+    _dj = os.path.join(SITIO, "data.json")
+    with io.open(_dj + ".tmp", "w", encoding="utf-8", newline="") as fh:
         json.dump(datos, fh, separators=(",", ":"))
+    os.replace(_dj + ".tmp", _dj)
 
     validos = hoy.dropna()
     reemplazos = {
@@ -350,12 +365,23 @@ def main():
         "@@CURVA@@": " &middot; ".join("%.4g" % v for v in curva.values),
         "@@MAXPAR@@": validos.idxmax(), "@@MAXVAL@@": "%d" % round(validos.max()),
         "@@MINPAR@@": validos.idxmin(), "@@MINVAL@@": "%d" % round(validos.min()),
+        "@@DEGRADACIONES@@": (
+            "" if not DEGRADACIONES else
+            '<div id="degrad"><b>ESTA PAGINA SE HA GENERADO INCOMPLETA.</b> '
+            + " ".join(DEGRADACIONES)
+            + " El resto de lo que se ve si esta al dia.</div>"),
     }
     html = PLANTILLA
     for k, v in reemplazos.items():
         html = html.replace(k, v)
-    with open(os.path.join(SITIO, "index.html"), "w", encoding="utf-8") as fh:
+    # ATOMICA: si el proceso muere a mitad de escribir, el index.html que sirve
+    # GitHub Pages seria HTML truncado -- una pagina rota, no una pagina vieja.
+    # Con tmp + os.replace, o queda la nueva entera o se queda la anterior.
+    destino = os.path.join(SITIO, "index.html")
+    tmp = destino + ".tmp"
+    with io.open(tmp, "w", encoding="utf-8", newline="") as fh:
         fh.write(html)
+    os.replace(tmp, destino)
 
     def kb(p):
         return os.path.getsize(p) / 1024.0
@@ -364,6 +390,12 @@ def main():
           % (kb(os.path.join(SITIO, "index.html")), kb(os.path.join(SITIO, "data.json"))))
     print("  ultimo dia: %s | pares: %d | sesiones: %d"
           % (ultimo.date(), len(meta), len(serie)))
+    if DEGRADACIONES:
+        print("  DEGRADADA: %s" % " ".join(DEGRADACIONES))
+    estado.escribir(True, "sitio",
+                    "incompleto" if DEGRADACIONES else "completo",
+                    {"degradaciones": list(DEGRADACIONES),
+                     "ultimo_dia_panel": str(ultimo.date())})
 
 
 PLANTILLA = u"""<!DOCTYPE html>
@@ -419,6 +451,9 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
              flex-wrap:wrap; padding:0 2px 6px 2px; }
 .pane-par { font-family:ui-monospace,Menlo,monospace; font-size:15px; font-weight:700; letter-spacing:.3px; }
 .pane-par .sub { color:var(--muted); font-weight:400; font-size:11.5px; margin-left:8px; letter-spacing:0; }
+#degrad { margin:14px 0 0; padding:10px 14px; border-radius:8px;
+  border:1px solid #6e4a1a; background:#1a1710; color:#d29922; font-size:12.5px; }
+#degrad b { color:#f0b849; }
 #vivo { display:none; margin:14px 0 0; padding:10px 14px; border-radius:8px;
   border:1px solid #2d4a2d; background:#121a12; font-size:12px; }
 #vivo.rancio { border-color:#4a3a1a; background:#1a1710; }
@@ -478,6 +513,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   </div>
 </div>
 
+@@DEGRADACIONES@@
 <div id="vivo">
   <div class="vtit" id="vtit">EN VIVO</div>
   <div class="vmeta" id="vmeta"></div>
