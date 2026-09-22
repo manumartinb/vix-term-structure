@@ -497,10 +497,16 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   <strong>SPX</strong> (eje derecho, escala propia): sirve para leer cada tramo de la curva
   contra lo que hacia el indice.
   <br><strong>DATOS</strong>: precio de <strong>liquidacion</strong> (settlement), no de cierre
-  &mdash; difieren en 3 de cada 4 dias. Abr-2007 a ago-2018 del archivo oficial del Cboe
-  Futures Exchange, contrato a contrato; de sep-2018 en adelante via TradingView, que publica
-  el mismo settlement. Validado contra el settlement oficial en las 2.436 sesiones en que el
-  exchange lo sirve: <strong>98,77% de coincidencia exacta</strong>.
+  &mdash; difieren en 3 de cada 4 dias. De abr-2007 a ago-2018, el archivo publico del Cboe
+  Futures Exchange contrato a contrato, <strong>salvo 16 contratos</strong> (los de sep, oct,
+  nov y dic de 2014 a 2017) que ese archivo no sirve y vienen de TradingView. De sep-2018 en
+  adelante, TradingView, que publica el mismo precio de liquidacion.
+  <br><strong>VERIFICACION INDEPENDIENTE</strong>: (a) contra el <em>endpoint</em> oficial de
+  settlement del exchange, en las fechas recientes que todavia sirve (15-jun, 15-jul, 14-ago y
+  18-sep de 2026), coincide <strong>al cuarto decimal</strong> en M1..M4; (b) contra una serie
+  construida aparte por el autor a partir de <em>scraping</em> de VIXCENTRAL, <strong>94,3% de
+  celdas identicas</strong>, y de 2010 a 2013 <strong>sin una sola diferencia</strong> en ~1.790
+  sesiones seguidas.
 </div>
 
 <details class="sec" data-sec="envol">
