@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "etapa": "descarga",
+  "detalle": "serie construida",
+  "momento": "2026-09-22 15:20:49",
+  "ultima_ok": "2026-09-22 15:20:49",
+  "sesiones": 4856,
+  "ultima_fecha": "2026-09-21",
+  "contratos_fallidos": [],
+  "aun_no_listados": [
+    "VXN2027"
+  ],
+  "meses_ultimo_dia": 8
+}

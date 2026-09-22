@@ -16,12 +16,20 @@ LA CADENA
 Si un paso falla, los siguientes NO corren: mas vale una pagina con el dato de
 ayer y un aviso en el movil, que una pagina con un dato inventado y silencio.
 
-LA HORA
-Se programa a las 23:00 de Madrid. Los futuros del VIX liquidan a las 16:15 de
-Nueva York = 22:15 de Madrid, y la diferencia son 6 horas todo el ano (los dos
-husos cambian a la vez), asi que 23:00 vale en verano y en invierno. El Master
-Daily corre a las 15:50 de Madrid = 09:50 de Nueva York: a esa hora el
-settlement del dia ni existe. Por eso esto NO cuelga de el.
+LA HORA: 22:45 de Madrid
+Los futuros del VIX liquidan a las 16:15 de Nueva York = 22:15 de Madrid, y la
+sesion SIGUIENTE abre a las 17:00 de Nueva York = 23:00 de Madrid. La ventana
+util son esos 45 minutos: antes no existe el precio oficial, despues ya hay una
+barra recien nacida del dia siguiente que se podria colar. La diferencia entre
+husos son 6 horas todo el ano (los dos cambian a la vez), asi que 22:45 vale en
+verano y en invierno.
+El Master Daily corre a las 15:50 de Madrid = 09:50 de Nueva York: a esa hora el
+settlement del dia ni existe. Por eso esto NO cuelga de el -- y ademas un fallo
+del VIX no debe tumbar a sus otros 8 hijos.
+
+DIAS SIN MERCADO
+No se hace nada. Y si es dia habil pero la serie no avanza, no se publica pero
+SI se avisa: callarse ahi seria saltarse en silencio justo los dias malos.
 
 CREDENCIALES
 No hay que configurar nada: TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID ya estan en
@@ -47,6 +55,7 @@ import subprocess
 import datetime as dt
 
 import estado
+import descargar_futuros_vix as dfv
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITIO = os.path.join(HERE, "sitio")
@@ -86,6 +95,44 @@ def tomar_candado(forzar=False):
 def soltar_candado():
     if os.path.exists(CANDADO):
         os.remove(CANDADO)
+
+
+def es_dia_de_mercado(hoy=None):
+    """True si hoy hay sesion en el CFE. Si el calendario no esta disponible se
+    cae a "de lunes a viernes": cubre el 96% de los casos y nunca calla un dia
+    habil, que es el error que importa."""
+    import datetime as _dt
+    import pandas as pd
+    d = pd.Timestamp(hoy or _dt.date.today())
+    hab = dfv._habiles_cfe()
+    if hab:
+        return d.normalize() in hab
+    return d.weekday() < 5
+
+
+def ultima_fecha_serie():
+    """Ultima fecha de la serie en disco, o None si no hay serie todavia."""
+    import pandas as pd
+    f = os.path.join(HERE, "data", "vix_futuros_M1_M8.csv")
+    if not os.path.exists(f):
+        return None
+    try:
+        return pd.read_csv(f, usecols=["Fecha"])["Fecha"].max()
+    except Exception:
+        return None
+
+
+def publicar_estado():
+    """Copia data/estado.json a la raiz del repo publico.
+
+    Es lo que permite vigilar el sistema DESDE FUERA de esta maquina: un proceso
+    que corre en GitHub puede mirar cuando fue la ultima corrida buena. Un
+    vigilante que vive en la misma maquina que el vigilado no es redundancia --
+    lo que mata a uno mata al otro."""
+    import shutil
+    src = os.path.join(HERE, "data", "estado.json")
+    if os.path.exists(src):
+        shutil.copy(src, os.path.join(SITIO, "estado.json"))
 
 
 def paso(nombre, cmd, cwd=None, dry=False):
@@ -148,8 +195,35 @@ def main():
         return
 
     try:
+        if not dry and not es_dia_de_mercado():
+            registrar("hoy no hay sesion en el CFE: no se hace nada")
+            registrar("CORRIDA OMITIDA (dia sin mercado)")
+            return
+
+        antes = ultima_fecha_serie()
         paso("descarga", [PYTHON, "descargar_futuros_vix.py"], dry=dry)
+        despues = ultima_fecha_serie()
+
+        # Dia habil y la serie NO ha avanzado: no se publica, pero NO se calla.
+        # Callarse aqui seria saltarse en silencio justo los dias en los que algo
+        # va mal, que es la enfermedad contra la que existe todo este fichero.
+        if not dry and antes is not None and despues == antes:
+            registrar("LA SERIE NO HA AVANZADO (sigue en %s) en un dia de mercado"
+                      % despues)
+            estado.escribir(False, "correr_noche/sin_avance",
+                            "Dia de mercado y la serie sigue en %s." % despues)
+            publicar_estado()
+            estado.avisar("<b>VIX CURVE - SIN DATO NUEVO</b>\n\n"
+                          "Hoy hay mercado pero la serie sigue en <b>%s</b>. "
+                          "No se ha publicado nada.\n"
+                          "Puede ser un festivo que el calendario no recoge, o que "
+                          "el proveedor no tenga el dato todavia." % despues)
+            soltar_candado()
+            sys.exit(1)
+
         paso("sitio", [PYTHON, "construir_sitio.py"], dry=dry)
+        if not dry:
+            publicar_estado()
 
         if "--sin-push" in args:
             registrar("--> publicar: SALTADO (--sin-push)")

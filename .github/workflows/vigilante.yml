@@ -1,0 +1,129 @@
+# Vigilante de latido.
+#
+# POR QUE EXISTE
+# Todas las alarmas del sistema viven en la maquina del autor y dan por supuesto
+# que el sistema ESTA CORRIENDO. Si la tarea programada se deshabilita, la maquina
+# se apaga o cambia la sesion de usuario, no salta nada: el estado se queda viejo
+# y el silencio es identico al de un dia tranquilo. Eso fue exactamente lo que
+# mato al sistema anterior (una hoja de calculo que estuvo tres meses congelada
+# sin que nadie se enterara).
+#
+# Un vigilante en la MISMA maquina no seria redundancia: lo que mata al vigilado
+# mata al vigilante. Por eso este corre en la infraestructura de GitHub.
+#
+# QUE MIRA
+# estado.json, que la corrida nocturna publica en este repo. Su campo `ultima_ok`
+# es la hora de la ultima corrida que termino bien.
+#
+# CUANDO
+# De martes a sabado. Cada ejecucion juzga la noche anterior: el martes mira el
+# lunes... el sabado mira el viernes. El domingo y el lunes no se mira nada,
+# porque la noche anterior no hubo mercado.
+#
+# EL UMBRAL (40 h) ES DELIBERADO
+# Una corrida normal deja el estado con ~10 h de antiguedad. Un festivo de
+# mercado lo deja en ~34 h, y eso NO debe dar la alarma. Con 40 h se tolera un
+# dia perdido y se avisa a los dos. La contrapartida, dicha sin adornos: un fallo
+# real se detecta con un dia de retraso. Se acepta porque este vigilante no es la
+# primera linea -- es el ultimo recurso para el caso "no ha corrido NADA". El
+# aviso diario de Telegram cubre el caso "corrio pero algo iba mal".
+#
+# NO USA SECRETOS A PROPOSITO
+# Este repo es publico y sus logs de Actions tambien. El bot de Telegram del autor
+# lo comparten todos sus sistemas, asi que meterlo aqui seria arriesgar mucho por
+# un aviso que GitHub ya sabe entregar: al abrir la incidencia manda un correo, y
+# al fallar el workflow, otro. Ademas ese correo viaja por un canal que no depende
+# de la maquina vigilada, que es justo lo que hace falta.
+
+name: Vigilante de latido
+
+on:
+  schedule:
+    - cron: "0 7 * * 2-6"     # martes a sabado, 07:00 UTC (09:00 Madrid en verano)
+  workflow_dispatch:           # y a mano, para poder probarlo
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  latido:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mirar cuando fue la ultima corrida buena
+        id: mirar
+        run: |
+          set -euo pipefail
+          if [ ! -f estado.json ]; then
+            echo "motivo=No hay estado.json en el repo." >> "$GITHUB_OUTPUT"
+            echo "alarma=si" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ULTIMA=$(python3 -c "import json;print(json.load(open('estado.json')).get('ultima_ok') or '')")
+          if [ -z "$ULTIMA" ]; then
+            echo "motivo=estado.json no tiene ultima_ok." >> "$GITHUB_OUTPUT"
+            echo "alarma=si" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          HORAS=$(python3 -c "
+          import datetime as dt
+          u = dt.datetime.strptime('$ULTIMA', '%Y-%m-%d %H:%M:%S')
+          print(round((dt.datetime.now() - u).total_seconds()/3600, 1))
+          ")
+          echo "Ultima corrida buena: $ULTIMA  (hace $HORAS h)"
+          echo "ultima=$ULTIMA" >> "$GITHUB_OUTPUT"
+          echo "horas=$HORAS" >> "$GITHUB_OUTPUT"
+          if python3 -c "import sys; sys.exit(0 if float('$HORAS') > 40 else 1)"; then
+            echo "motivo=La ultima corrida buena fue el $ULTIMA, hace $HORAS horas." >> "$GITHUB_OUTPUT"
+            echo "alarma=si" >> "$GITHUB_OUTPUT"
+          else
+            echo "alarma=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Abrir incidencia si no hay latido
+        if: steps.mirar.outputs.alarma == 'si'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const motivo = `${{ steps.mirar.outputs.motivo }}`;
+            const hoy = new Date().toISOString().slice(0, 10);
+            const titulo = `Sin latido: la curva VIX no se actualiza (${hoy})`;
+            const cuerpo = [
+              `**${motivo}**`,
+              '',
+              'La corrida nocturna publica `estado.json` cada dia de mercado a las',
+              '22:45 de Madrid. Que este viejo significa que **no ha llegado a',
+              'terminar**, o que directamente no se ha lanzado.',
+              '',
+              'Que mirar, por orden:',
+              '',
+              '1. La tarea programada `VIX CURVE Noche` en la maquina: existe, esta',
+              '   habilitada, y que dice su ultimo resultado.',
+              '2. `VIX_CURVE/data/estado.json` en local: si `ok` es `false`, el campo',
+              '   `etapa` dice en que eslabon se paro.',
+              '3. `VIX_CURVE/data/correr_noche.log`, que guarda cada corrida.',
+              '',
+              'Si fue un festivo de mercado que el calendario no recoge, cierra esto',
+              'sin mas: el umbral son 40 horas justamente para tolerar un dia suelto.',
+            ].join('\n');
+
+            const abiertas = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'sin-latido',
+            });
+            if (abiertas.data.length > 0) {
+              core.info('Ya hay una incidencia abierta; no se duplica.');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: abiertas.data[0].number,
+                body: `Sigue sin latido a ${hoy}. ${motivo}`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title: titulo, body: cuerpo, labels: ['sin-latido'],
+              });
+            }
+            core.setFailed(motivo);
