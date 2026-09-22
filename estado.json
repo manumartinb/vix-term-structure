@@ -1,9 +1,11 @@
 {
   "ok": true,
-  "etapa": "correr_noche",
-  "detalle": "cadena completa",
-  "momento": "2026-09-22 16:30:53",
-  "momento_utc": "2026-09-22T14:30:53Z",
-  "ultima_ok": "2026-09-22 16:30:53",
-  "ultima_ok_utc": "2026-09-22T14:30:53Z"
+  "etapa": "sitio",
+  "detalle": "completo",
+  "momento": "2026-09-22 22:46:09",
+  "momento_utc": "2026-09-22T20:46:09Z",
+  "ultima_ok": "2026-09-22 22:46:09",
+  "ultima_ok_utc": "2026-09-22T20:46:09Z",
+  "degradaciones": [],
+  "ultimo_dia_panel": "2026-09-22"
 }
