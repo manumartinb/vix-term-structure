@@ -1,6 +1,6 @@
 {
- "momento": "2026-09-22 10:30:53",
- "ventana_s": 5.73,
+ "momento": "2026-09-22 10:44:32",
+ "ventana_s": 4.54,
  "todas_a_la_vez": true,
  "patas_en_vivo": 7,
  "patas_total": 8,
@@ -14,8 +14,8 @@
    "vencimiento": "2026-10-21",
    "precio": 17.8,
    "origen": "vivo",
-   "edad_min": 15.9,
-   "vela": "2026-09-22 10:15"
+   "edad_min": 19.6,
+   "vela": "2026-09-22 10:25"
   },
   {
    "hueco": "M2",
@@ -23,7 +23,7 @@
    "vencimiento": "2026-11-18",
    "precio": 18.52,
    "origen": "vivo",
-   "edad_min": 15.9,
+   "edad_min": 29.6,
    "vela": "2026-09-22 10:15"
   },
   {
@@ -32,7 +32,7 @@
    "vencimiento": "2026-12-16",
    "precio": 18.9,
    "origen": "vivo",
-   "edad_min": 20.9,
+   "edad_min": 34.6,
    "vela": "2026-09-22 10:10"
   },
   {
@@ -41,7 +41,7 @@
    "vencimiento": "2027-01-20",
    "precio": 19.7,
    "origen": "vivo",
-   "edad_min": 15.9,
+   "edad_min": 29.6,
    "vela": "2026-09-22 10:15"
   },
   {
@@ -50,7 +50,7 @@
    "vencimiento": "2027-02-17",
    "precio": 20.1,
    "origen": "vivo",
-   "edad_min": 20.9,
+   "edad_min": 34.6,
    "vela": "2026-09-22 10:10"
   },
   {
@@ -59,7 +59,7 @@
    "vencimiento": "2027-03-17",
    "precio": 20.35,
    "origen": "vivo",
-   "edad_min": 15.9,
+   "edad_min": 29.6,
    "vela": "2026-09-22 10:15"
   },
   {
@@ -68,7 +68,7 @@
    "vencimiento": "2027-04-21",
    "precio": 20.65,
    "origen": "vivo",
-   "edad_min": 85.9,
+   "edad_min": 99.6,
    "vela": "2026-09-22 09:05"
   },
   {
@@ -77,7 +77,7 @@
    "vencimiento": "2027-05-19",
    "precio": 20.892,
    "origen": "cierre_previo",
-   "edad_min": 755.9,
+   "edad_min": 769.6,
    "vela": "2026-09-21 21:55"
   }
  ],
