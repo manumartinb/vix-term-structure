@@ -67,11 +67,16 @@ def avisar(texto):
         return False
 
 
-def escribir(ok, etapa, detalle="", extra=None):
+def escribir(ok, etapa, detalle="", extra=None, marca_ok=True):
     """Escribe data/estado.json de forma ATOMICA (tmp + os.replace).
 
     Conserva `ultima_ok` de la corrida buena anterior, para que se pueda ver de un
-    vistazo cuanto lleva el sistema sin producir nada valido."""
+    vistazo cuanto lleva el sistema sin producir nada valido.
+
+    `marca_ok=False`: la etapa fue bien pero NO renueva `ultima_ok`. Lo usa la
+    descarga, que es un paso intermedio. Hasta el 2026-09-23 la descarga la
+    renovaba siempre, tambien el dia en que la serie NO avanzaba, y el vigilante de
+    GitHub (que mira `ultima_ok_utc`) no podia ver nunca un sistema atascado."""
     prev = {}
     if os.path.exists(ESTADO):
         try:
@@ -91,8 +96,8 @@ def escribir(ok, etapa, detalle="", extra=None):
         "detalle": detalle,
         "momento": ahora,
         "momento_utc": ahora_utc,
-        "ultima_ok": ahora if ok else prev.get("ultima_ok"),
-        "ultima_ok_utc": ahora_utc if ok else prev.get("ultima_ok_utc"),
+        "ultima_ok": ahora if (ok and marca_ok) else prev.get("ultima_ok"),
+        "ultima_ok_utc": ahora_utc if (ok and marca_ok) else prev.get("ultima_ok_utc"),
     }
     if extra:
         d.update(extra)

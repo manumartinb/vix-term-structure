@@ -1,5 +1,6 @@
 """
 correr_noche.py -- la corrida diaria completa, desatendida.
+(El nombre es historico: desde el 2026-09-23 corre por la MANANA. Ver LA HORA.)
 
 POR QUE EXISTE
 Hasta hoy el sistema era una foto fija: 0 tareas programadas, 0 hijos del Master
@@ -16,20 +17,28 @@ LA CADENA
 Si un paso falla, los siguientes NO corren: mas vale una pagina con el dato de
 ayer y un aviso en el movil, que una pagina con un dato inventado y silencio.
 
-LA HORA: 22:45 de Madrid
-Los futuros del VIX liquidan a las 16:15 de Nueva York = 22:15 de Madrid, y la
-sesion SIGUIENTE abre a las 17:00 de Nueva York = 23:00 de Madrid. La ventana
-util son esos 45 minutos: antes no existe el precio oficial, despues ya hay una
-barra recien nacida del dia siguiente que se podria colar. La diferencia entre
-husos son 6 horas todo el ano (los dos cambian a la vez), asi que 22:45 vale en
-verano y en invierno.
-El Master Daily corre a las 15:50 de Madrid = 09:50 de Nueva York: a esa hora el
-settlement del dia ni existe. Por eso esto NO cuelga de el -- y ademas un fallo
-del VIX no debe tumbar a sus otros 8 hijos.
+LA HORA: 08:00 de Madrid, con reintento a las 11:00 (desde el 2026-09-23)
+La historia sale SOLO del fichero oficial del CBOE, y el CBOE lo actualiza de
+madrugada: medido el 2026-09-23, Last-Modified 05:06 GMT = 07:06 de Madrid, con la
+sesion del dia anterior. A las 08:00 hay casi una hora de margen; la corrida de
+las 11:00 es la red por si un dia lo cuelgan tarde.
+Antes corria a las 22:45 contra TradingView, con una premisa FALSA escrita aqui
+mismo: "la diferencia entre husos son 6 horas todo el ano, los dos cambian a la
+vez". No cambian a la vez: EEUU adelanta la hora ~3 semanas antes que Europa y la
+atrasa 1 semana despues. En esas semanas TradingView fechaba cada vela con el dia
+anterior y el panel guardaba el precio de MANANA (estudio completo en
+ESTRATEGIAS/ANALISIS/SETTLE_OFICIAL_VIX_20260923).
+El Master Daily corre a las 15:50 de Madrid: esto NO cuelga de el -- un fallo del
+VIX no debe tumbar a sus otros hijos.
 
-DIAS SIN MERCADO
-No se hace nada. Y si es dia habil pero la serie no avanza, no se publica pero
-SI se avisa: callarse ahi seria saltarse en silencio justo los dias malos.
+QUE SESION TOCA
+La ultima sesion del CFE ANTERIOR a hoy (la de ayer; el lunes, la del viernes).
+  - Si la serie ya llega ahi: no hay nada que hacer y se sale sin ruido. Pasa los
+    domingos, los lunes y cualquier dia siguiente a un festivo.
+  - Si el CBOE aun no la ha colgado y NO es el ultimo intento: se deja constancia y
+    se sale sin alarma; la corrida de las 11:00 lo vuelve a probar.
+  - Si en el ULTIMO intento (desde las 11:00) sigue sin estar: no se publica, pero
+    SI se avisa. Callarse ahi seria saltarse en silencio justo los dias malos.
 
 CREDENCIALES
 No hay que configurar nada: TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID ya estan en
@@ -42,6 +51,9 @@ USO
   python correr_noche.py --sin-push   # todo menos publicar
   python correr_noche.py --sin-aviso  # todo menos el Telegram
   python correr_noche.py --once       # ignora el candado (lanzamiento manual)
+  python correr_noche.py --ultimo     # trata esta corrida como el ultimo intento
+  python correr_noche.py --primer-intento   # lo contrario, aunque sean mas de las 11 (pruebas)
+  python correr_noche.py --hoy 2026-09-28   # simula otra fecha (solo pruebas)
 
 Reglas tecnicas del proyecto: ASCII, cp1252.
 """
@@ -63,6 +75,8 @@ LOG = os.path.join(HERE, "data", "correr_noche.log")
 CANDADO = os.path.join(HERE, "data", ".corriendo")
 PYTHON = sys.executable
 CANDADO_VIEJO_H = 3     # un candado mas viejo que esto es un proceso muerto
+HORA_ULTIMO_INTENTO = 11   # la corrida de las 11:00 (o cualquiera posterior) es la
+                           # ultima del dia: si ahi falta el dato, se avisa
 
 
 def registrar(msg):
@@ -97,17 +111,29 @@ def soltar_candado():
         os.remove(CANDADO)
 
 
-def es_dia_de_mercado(hoy=None):
-    """True si hoy hay sesion en el CFE. Si el calendario no esta disponible se
+def es_sesion(d):
+    """True si la fecha es sesion del CFE. Si el calendario no esta disponible se
     cae a "de lunes a viernes": cubre el 96% de los casos y nunca calla un dia
     habil, que es el error que importa."""
-    import datetime as _dt
     import pandas as pd
-    d = pd.Timestamp(hoy or _dt.date.today())
+    d = pd.Timestamp(d).normalize()
     hab = dfv._habiles_cfe()
     if hab:
-        return d.normalize() in hab
+        return d in hab
     return d.weekday() < 5
+
+
+def sesion_objetivo(hoy=None):
+    """La sesion que YA deberia estar publicada: la ultima sesion del CFE ANTERIOR
+    a hoy. El CBOE cuelga la liquidacion de madrugada del dia siguiente, asi que
+    la de hoy nunca esta todavia."""
+    import pandas as pd
+    d = pd.Timestamp(hoy or dt.date.today()).normalize()
+    for k in range(1, 15):
+        c = d - pd.Timedelta(days=k)
+        if es_sesion(c):
+            return c
+    return d - pd.Timedelta(days=1)
 
 
 def ultima_fecha_serie():
@@ -163,7 +189,7 @@ def hay_cambios():
     return bool((p.stdout or "").strip())
 
 
-def publicar(dry=False):
+def publicar(dry=False, sesion=None):
     registrar("--> publicar en GitHub Pages")
     if dry:
         registrar("    (dry-run) git add -A / commit / push")
@@ -171,7 +197,9 @@ def publicar(dry=False):
     if not hay_cambios():
         registrar("    nada que publicar (la pagina ya esta al dia)")
         return True
-    msg = "actualizacion diaria %s" % dt.date.today().isoformat()
+    # el mensaje lleva la SESION publicada, no el dia en que corre: por la manana
+    # no coinciden, y el commit tiene que decir que dato trae
+    msg = "actualizacion diaria: sesion %s" % (sesion or dt.date.today().isoformat())
     for cmd in (["git", "add", "-A"], ["git", "commit", "-m", msg], ["git", "push"]):
         p = subprocess.run(cmd, cwd=SITIO, capture_output=True, text=True)
         if p.returncode != 0:
@@ -185,41 +213,70 @@ def publicar(dry=False):
 
 
 def main():
+    import pandas as pd
     args = sys.argv[1:]
     dry = "--dry-run" in args
+    hoy = args[args.index("--hoy") + 1] if "--hoy" in args else None
+    ultimo = "--ultimo" in args or (dt.datetime.now().hour >= HORA_ULTIMO_INTENTO
+                                    and "--primer-intento" not in args)
 
     registrar("=" * 62)
-    registrar("CORRIDA NOCTURNA VIX_CURVE%s" % ("  (DRY-RUN)" if dry else ""))
+    registrar("CORRIDA DIARIA VIX_CURVE%s%s%s"
+              % ("  (DRY-RUN)" if dry else "", "  [ultimo intento]" if ultimo else "",
+                 "  [hoy simulado: %s]" % hoy if hoy else ""))
 
     if not dry and not tomar_candado(forzar="--once" in args):
         return
 
     try:
-        if not dry and not es_dia_de_mercado():
-            registrar("hoy no hay sesion en el CFE: no se hace nada")
-            registrar("CORRIDA OMITIDA (dia sin mercado)")
+        objetivo = sesion_objetivo(hoy)
+        antes = ultima_fecha_serie()
+        registrar("sesion que toca: %s | la serie llega al %s" % (objetivo.date(), antes))
+        if antes is not None and pd.Timestamp(antes) >= objetivo:
+            registrar("la serie ya esta al dia: nada que hacer")
+            registrar("CORRIDA OMITIDA (ya al dia)")
             return
 
-        antes = ultima_fecha_serie()
         paso("descarga", [PYTHON, "descargar_futuros_vix.py"], dry=dry)
         despues = ultima_fecha_serie()
 
-        # Dia habil y la serie NO ha avanzado: no se publica, pero NO se calla.
-        # Callarse aqui seria saltarse en silencio justo los dias en los que algo
-        # va mal, que es la enfermedad contra la que existe todo este fichero.
-        if not dry and antes is not None and despues == antes:
-            registrar("LA SERIE NO HA AVANZADO (sigue en %s) en un dia de mercado"
-                      % despues)
-            estado.escribir(False, "correr_noche/sin_avance",
-                            "Dia de mercado y la serie sigue en %s." % despues)
-            publicar_estado()
-            estado.avisar("<b>VIX CURVE - SIN DATO NUEVO</b>\n\n"
-                          "Hoy hay mercado pero la serie sigue en <b>%s</b>. "
-                          "No se ha publicado nada.\n"
-                          "Puede ser un festivo que el calendario no recoge, o que "
-                          "el proveedor no tenga el dato todavia." % despues)
-            soltar_candado()
-            sys.exit(1)
+        if not dry and (despues is None or pd.Timestamp(despues) < objetivo):
+            avanzo = antes is None or despues != antes
+            if not avanzo and not ultimo:
+                # El CBOE aun no ha colgado la sesion: normal si un dia va tarde.
+                # Constancia en disco y sin alarma; la corrida de las 11:00 reintenta.
+                registrar("el CBOE aun no ha colgado la sesion del %s (la serie sigue "
+                          "en %s): se reintenta a las %02d:00"
+                          % (objetivo.date(), despues, HORA_ULTIMO_INTENTO))
+                estado.escribir(False, "correr_noche/pendiente",
+                                "La sesion del %s aun no esta en el CBOE; la serie sigue "
+                                "en %s. Se reintenta a las %02d:00."
+                                % (objetivo.date(), despues, HORA_ULTIMO_INTENTO))
+                registrar("CORRIDA APLAZADA (esperando al CBOE)")
+                return
+            if not avanzo:
+                # Ultimo intento y sigue sin estar: no se publica, pero NO se calla.
+                # Callarse aqui seria saltarse en silencio justo los dias en los que
+                # algo va mal, que es la enfermedad contra la que existe este fichero.
+                registrar("LA SERIE NO HA AVANZADO (sigue en %s) y la sesion del %s "
+                          "ya deberia estar publicada" % (despues, objetivo.date()))
+                estado.escribir(False, "correr_noche/sin_avance",
+                                "La sesion del %s no esta en el CBOE en el ultimo "
+                                "intento; la serie sigue en %s." % (objetivo.date(), despues))
+                publicar_estado()
+                estado.avisar("<b>VIX CURVE - SIN DATO NUEVO</b>\n\n"
+                              "El CBOE no ha publicado la liquidacion del <b>%s</b> "
+                              "(ultimo intento de la manana). La serie sigue en <b>%s</b> "
+                              "y no se ha publicado nada.\n"
+                              "Puede ser un festivo que el calendario no recoge, o que "
+                              "el CBOE vaya con retraso." % (objetivo.date(), despues))
+                soltar_candado()
+                sys.exit(1)
+            # Avanzo, pero no hasta la sesion que tocaba: el CBOE se ha saltado una
+            # o el calendario cuenta como sesion un dia que no lo fue. Se publica lo
+            # que hay y queda escrito.
+            registrar("AVISO: la serie avanza al %s pero la sesion que tocaba era el %s"
+                      % (despues, objetivo.date()))
 
         paso("sitio", [PYTHON, "construir_sitio.py"], dry=dry)
         if not dry:
@@ -228,7 +285,7 @@ def main():
         if "--sin-push" in args:
             registrar("--> publicar: SALTADO (--sin-push)")
         else:
-            publicar(dry=dry)
+            publicar(dry=dry, sesion=despues)
 
         if "--sin-aviso" in args:
             registrar("--> aviso: SALTADO (--sin-aviso)")

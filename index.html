@@ -92,7 +92,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
     <div class="subtitle">Los 8 primeros vencimientos de futuros del VIX cruzados entre si
       (28 pares). Para cada dia, donde queda ese par frente a los dias anteriores que
       estaban <strong>a la misma distancia del vencimiento</strong> &mdash; percentil
-      expanding y condicional, sin mirar al futuro. Desde Apr 2007, 4.857 sesiones.</div>
+      expanding y condicional, sin mirar al futuro. Desde Apr 2007, 4.903 sesiones.</div>
   </div>
   <div class="latest-group">
     <div class="latest">
@@ -152,11 +152,17 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   Cada grafico lleva selector de rango y zoom. La linea gris tenue del fondo es el
   <strong>SPX</strong> (eje derecho, escala propia): sirve para leer cada tramo de la curva
   contra lo que hacia el indice.
-  <br><strong>DATOS</strong>: precio de <strong>liquidacion</strong> (settlement), no de cierre
-  &mdash; difieren en 3 de cada 4 dias. De abr-2007 a ago-2018, el archivo publico del Cboe
-  Futures Exchange contrato a contrato, <strong>salvo 16 contratos</strong> (los de sep, oct,
-  nov y dic de 2014 a 2017) que ese archivo no sirve y vienen de TradingView. De sep-2018 en
-  adelante, TradingView, que publica el mismo precio de liquidacion.
+  <br><strong>DATOS</strong>: precio de <strong>liquidacion oficial</strong> (settlement) del
+  exchange, no de cierre &mdash; difieren en 3 de cada 4 dias. <strong>Todo sale del Cboe
+  Futures Exchange</strong>, contrato a contrato: de abr-2007 a feb-2018 su archivo publico, y
+  lo demas su fichero oficial por contrato (<em>historical data</em>), que cubre desde 2013.
+  Donde las dos fuentes se solapan coinciden al cuarto decimal. Se actualiza cada manana con la
+  sesion anterior.
+  <br><strong>CORREGIDO EL 23-SEP-2026</strong>: hasta esa fecha el tramo de sep-2018 en adelante
+  (y 16 contratos de 2014-2017) venia de TradingView y tenia un <strong>desfase de fecha</strong>:
+  en las ~3 semanas al ano en que EEUU y Europa cambian la hora en fechas distintas (marzo y
+  final de octubre), cada dia llevaba la liquidacion del dia SIGUIENTE, y faltaban 47 sesiones.
+  La serie se ha rehecho entera con la liquidacion oficial.
   <br><strong>VERIFICACION INDEPENDIENTE</strong>: (a) contra el <em>endpoint</em> oficial de
   settlement del exchange, en las fechas recientes que todavia sirve (15-jun, 15-jul, 14-ago y
   18-sep de 2026), coincide <strong>al cuarto decimal</strong> en M1..M4; (b) contra una serie
@@ -245,11 +251,11 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
 
 <div class="footer">
   <p><b>Roll</b>: un contrato deja de ser M1 el mismo dia en que liquida. <b>Dias sin sesion</b>:
-  filtrados con el calendario real del CFE (algunos proveedores emiten barra para la sesion
-  nocturna del domingo, que no es dia de liquidacion). <b>Reescalado de 2007</b>: hasta el
+  las fechas son las del propio exchange &mdash; solo hay fila si el Cboe publico liquidacion
+  ese dia. <b>Reescalado de 2007</b>: hasta el
   23-mar-2007 los futuros del VIX cotizaban a diez veces el indice; esta serie arranca despues
   del cambio para no mezclar escalas.</p>
-  <p>Generado el 2026-09-22 22:46 &middot; datos de mercado publicos, sin garantia de exactitud y
+  <p>Generado el 2026-09-23 11:56 &middot; datos de mercado publicos, sin garantia de exactitud y
   sin fin comercial &middot; esto no es asesoramiento de inversion.</p>
 </div>
 
@@ -495,7 +501,8 @@ load();
       v.patas_en_vivo + ' de ' + v.patas_total + ' con precio del momento. ' +
       'Comparado contra el historico cerrado hasta el ' + v.historia_hasta +
       ' (' + v.dte_m1 + ' dias al vencimiento del M1). ' +
-      '<strong>Provisional</strong>: el dato firme es el settlement de esta noche.';
+      '<strong>Provisional</strong>: el dato firme es la liquidacion oficial, que entra ' +
+      'manana a primera hora.';
 
     var h = '';
     v.patas.forEach(function (p) {

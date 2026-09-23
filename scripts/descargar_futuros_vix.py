@@ -10,15 +10,31 @@ VENTANA: desde 2007-04-01 hasta hoy (decision del usuario, 2026-09-21). Lo anter
 se descarta: evita el reescalado del 2007-03-26 (ver mas abajo) y los anios en que
 CFE aun no listaba meses suficientes para formar una curva de 8.
 
-FUENTES (en este orden, por contrato)
-  1) CBOE OFICIAL (archivo CDN):   contratos K04 (may-2004) .. Q18 (ago-2018)
+FUENTES -- SOLO LIQUIDACION OFICIAL DEL CBOE (desde el 2026-09-23)
+  1) Archivo CDN antiguo:          contratos K04 (may-2004) .. Q18 (ago-2018)
      https://cdn.cboe.com/resources/futures/archive/volume-and-price/CFE_<CODE><YY>_VX.csv
      Columnas: Trade Date, Futures, Open, High, Low, Close, Settle, Change,
                Total Volume, EFP, Open Interest
      Verificado 2026-09-21: K04..Q18 responden 200; U18 en adelante dan 403.
-  2) TradingView (tvDatafeed, sin login): contratos U18 (sep-2018) en adelante
-     Simbolo VX<CODE><YYYY> en exchange CBOE (ej. VXV2026 = octubre 2026).
-     Solo trae Close (no hay Settle).
+  2) Fichero oficial por contrato ("historical data"): contratos que vencen desde 2013
+     https://cdn.cboe.com/data/us/futures/market_statistics/historical_data/VX/VX_<VENC>.csv
+     <VENC> = fecha de VENCIMIENTO (AAAA-MM-DD). Mismas columnas. Antes de 2013 -> 403.
+     Se usa para todo lo que el archivo antiguo no tiene: los contratos de sep-2018
+     en adelante, los 16 de sep-dic 2014-2017 que el antiguo no sirve, y la cola de
+     los de mar-ago 2018, que el antiguo corta el 2018-02-23.
+     Donde los dos se solapan (6.909 precios de 2013-2018) coinciden al cuarto decimal.
+     El CBOE lo actualiza de madrugada: medido el 2026-09-23, Last-Modified 05:06 GMT
+     (07:06 de Madrid) con la sesion del dia anterior. Por eso la corrida es de manana.
+
+  Hasta el 2026-09-23 el tramo 2018 -> hoy venia de TradingView (tvDatafeed), y
+  estaba MAL FECHADO: tvDatafeed pone la hora LOCAL de la maquina y la vela diaria de
+  un futuro lleva la hora de APERTURA de su sesion (17:00 de Chicago del dia
+  anterior). Con EEUU y Europa desincronizados (~3 semanas al ano, marzo y final de
+  octubre) cada dia guardaba la liquidacion del dia SIGUIENTE (1.039 precios, 174
+  dias), y la vela del dia siguiente a un festivo de EEUU caia en el festivo y la
+  tiraba el filtro de dias fantasma (47 dias de mercado perdidos). Estudio completo:
+  ESTRATEGIAS/ANALISIS/SETTLE_OFICIAL_VIX_20260923. TradingView queda SOLO para la
+  banda en vivo (vivo.py, velas de 5 minutos), que no se guarda en la historia.
 
 TRAMPA DE ESCALA (verificada 2026-09-21, critica)
 Hasta el 2007-03-23 los futuros VIX cotizaban a DIEZ VECES el indice; el 2007-03-26
@@ -31,22 +47,32 @@ nunca se topo con esto.
 
 VENCIMIENTO
 Regla CFE: miercoles 30 dias antes del tercer viernes del mes SIGUIENTE al del
-contrato. Para contratos ya vencidos se usa la ultima fecha observada en su propio
-fichero (es la verdad del dato); la regla solo se usa para los que siguen vivos.
-El script compara las dos y reporta cuantas veces difieren (control de sanidad).
+contrato. Manda la fecha OFICIAL cuando se tiene: el fichero "historical data" se
+llama por su vencimiento, asi que la fecha con la que responde ES el vencimiento.
+Para los contratos del archivo antiguo se usa la ultima fecha de su propio fichero,
+que incluye el dia de liquidacion. (Antes se usaba la ultima fecha observada en
+TradingView, que no imprimia el dia de liquidacion en marzo: los 9 marzos de
+2018-2026 quedaban un dia antes.) El script compara regla y fecha efectiva y
+reporta cuantas veces difieren (control de sanidad).
 
 SALIDAS (carpeta data/)
   contratos/<CONTRATO>.csv          cache crudo por contrato (no se re-descarga)
-  vix_contratos_largo.csv           formato largo: fecha, contrato, vencimiento, close, settle, fuente
+  vix_contratos_largo.csv           formato largo: fecha, contrato, vencimiento, close,
+                                    settle, fuente, volumen, oi (volumen e interes
+                                    abierto: vacios en los contratos viejos cacheados)
   vix_futuros_M1_M8.csv             pivotado limpio: Fecha, M1..M8
   vix_futuros_M1_M8_detalle.csv     idem + vencimiento de cada mes + n contratos vivos
+
+CACHE: un contrato vencido se lee de la cache siempre que su fuente sea OFICIAL. Una
+cache de otra fuente (TradingView, de antes del 2026-09-23) se descarta y se vuelve a
+bajar del CBOE: la primera corrida tras el cambio migra sola.
 
 USO
   python descargar_futuros_vix.py                 # usa cache, descarga solo lo que falte
   python descargar_futuros_vix.py --refresh       # re-descarga todo (ignora cache)
-  python descargar_futuros_vix.py --solo-cboe     # no toca TradingView (solo 2004-2018)
   python descargar_futuros_vix.py --limite 20     # solo los N primeros contratos (prueba rapida)
   python descargar_futuros_vix.py --dry-run       # no escribe nada, solo dice que haria
+  (--solo-cboe se acepta por compatibilidad y ya no hace nada: todo es CBOE)
 
 Reglas tecnicas del proyecto: ASCII, cp1252.
 """
@@ -67,6 +93,15 @@ CACHE = os.path.join(DATA, "contratos")
 
 CBOE_URL = ("https://cdn.cboe.com/resources/futures/archive/"
             "volume-and-price/CFE_%s%02d_VX.csv")
+# fichero oficial por contrato, llamado por su fecha de VENCIMIENTO (2013 en adelante)
+CBOE_HIST_URL = ("https://cdn.cboe.com/data/us/futures/market_statistics/"
+                 "historical_data/VX/VX_%s.csv")
+# Unicas fuentes admitidas en la historia. Una cache con otra etiqueta (TradingView)
+# se descarta y se vuelve a bajar: asi la primera corrida tras el cambio migra sola.
+FUENTES_OFICIALES = ("CBOE", "CBOE_HIST", "CBOE+HIST")
+# Si la fecha de la regla no responde, se prueban estas desviaciones en dias. La
+# regla ya contempla festivos; esto es red por si el calendario se equivoca.
+DESVIOS_VENC = (0, 1, -1, 2, -2)
 
 # codigo de mes de futuros: 1=enero ... 12=diciembre
 CODIGOS = ["F", "G", "H", "J", "K", "M", "N", "Q", "U", "V", "X", "Z"]
@@ -91,8 +126,6 @@ TOL_COLA = 5           # dias: si un contrato VENCIDO acaba antes de esto de su
 CBOE_HASTA = (2018, 8)
 
 N_MESES = 8          # M1..M8
-PAUSA_TV = 1.5       # segundos entre llamadas a TradingView
-REINTENTOS_TV = 3
 # CBOE limita por volumen: en la primera corrida masiva (170 peticiones seguidas)
 # empezo a devolver 403 a partir del contrato ~2013 y el script cayo al plan B de
 # TradingView sin que se notara. Con pausa + reintento la fuente oficial aguanta.
@@ -242,22 +275,10 @@ def lista_contratos():
 # ---------------------------------------------------------------------------
 # descarga
 # ---------------------------------------------------------------------------
-def descargar_cboe(codigo, anio):
-    """Devuelve DataFrame [fecha, close, settle] o None. Fuente oficial del exchange."""
-    import urllib.request
-    url = CBOE_URL % (codigo, anio % 100)
-    raw = None
-    for intento in range(REINTENTOS_CBOE):
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            raw = urllib.request.urlopen(req, timeout=45).read().decode("utf-8", "replace")
-            break
-        except Exception:
-            # 403 por limitacion de volumen: esperar mas en cada intento
-            time.sleep(PAUSA_CBOE * (intento + 1) * 2)
-    time.sleep(PAUSA_CBOE)
-    if raw is None:
-        return None
+def _parsear_cboe(raw):
+    """CSV del CBOE -> DataFrame [fecha, close, settle, volumen, oi] o None.
+
+    Comun a las dos fuentes del exchange, que traen las mismas columnas."""
     # Los ficheros de 2013 en adelante llevan un PARRAFO de aviso legal ANTES de la
     # cabecera; los de 2007-2012 empiezan directamente en "Trade Date". Hay que buscar
     # la cabecera, no suponer que es la linea 1.
@@ -274,12 +295,13 @@ def descargar_cboe(codigo, anio):
     lineas = lineas[inicio:]
     import io
     df = pd.read_csv(io.StringIO("\n".join(lineas)))
-    df = df.rename(columns={"Trade Date": "fecha", "Close": "close", "Settle": "settle"})
+    df = df.rename(columns={"Trade Date": "fecha", "Close": "close", "Settle": "settle",
+                            "Total Volume": "volumen", "Open Interest": "oi"})
     if "fecha" not in df.columns:
         return None
     df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce")
-    for c in ("close", "settle"):
-        df[c] = pd.to_numeric(df.get(c), errors="coerce")
+    for c in ("close", "settle", "volumen", "oi"):
+        df[c] = pd.to_numeric(df[c], errors="coerce") if c in df.columns else np.nan
     df = df.dropna(subset=["fecha"])
     # filas con precio 0 = contrato listado pero sin negociar ese dia -> fuera
     df = df[(df["close"].fillna(0) > 0) | (df["settle"].fillna(0) > 0)]
@@ -290,7 +312,58 @@ def descargar_cboe(codigo, anio):
     if pre.any():
         df.loc[pre, "close"] = df.loc[pre, "close"] / FACTOR_PRE_REESCALADO
         df.loc[pre, "settle"] = df.loc[pre, "settle"] / FACTOR_PRE_REESCALADO
-    return df[["fecha", "close", "settle"]].sort_values("fecha").reset_index(drop=True)
+    return (df[["fecha", "close", "settle", "volumen", "oi"]]
+            .sort_values("fecha").reset_index(drop=True))
+
+
+def _pedir(url, intentos):
+    """Texto de la URL o None. Espera mas en cada intento fallido."""
+    import urllib.request
+    for intento in range(intentos):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            return urllib.request.urlopen(req, timeout=45).read().decode("utf-8", "replace")
+        except Exception:
+            if intento + 1 < intentos:
+                time.sleep(PAUSA_CBOE * (intento + 1) * 2)
+    return None
+
+
+def descargar_cboe(codigo, anio):
+    """Archivo CDN antiguo (hasta ago-2018). DataFrame o None."""
+    raw = _pedir(CBOE_URL % (codigo, anio % 100), REINTENTOS_CBOE)
+    time.sleep(PAUSA_CBOE)
+    return None if raw is None else _parsear_cboe(raw)
+
+
+def descargar_cboe_hist(venc_teorico):
+    """Fichero oficial por contrato (2013 en adelante). Devuelve (DataFrame,
+    vencimiento_oficial) o (None, None).
+
+    El fichero se llama por la fecha de VENCIMIENTO, asi que la fecha con la que
+    responde ES el vencimiento oficial. Se prueba primero la regla (con reintentos:
+    es casi siempre la buena) y despues +-1 y +-2 dias, una sola vez cada una. Una
+    fecha que no existe devuelve 403, igual que un corte por volumen: por eso la de
+    la regla se reintenta y las demas no."""
+    base = pd.Timestamp(venc_teorico).normalize()
+    for d in DESVIOS_VENC:
+        v = base + pd.Timedelta(days=d)
+        raw = _pedir(CBOE_HIST_URL % v.strftime("%Y-%m-%d"),
+                     REINTENTOS_CBOE if d == 0 else 1)
+        time.sleep(PAUSA_CBOE)
+        if raw is None:
+            continue
+        df = _parsear_cboe(raw)
+        if df is None:
+            continue
+        # Guarda: fuera cualquier sesion que aun no haya liquidado. El fichero no
+        # deberia traerlas (se publica de madrugada), pero si un dia cambian eso, el
+        # ultimo negociado de una sesion a medias no puede entrar como historia.
+        df = df[[sesion_liquidada(f) for f in df["fecha"]]]
+        if len(df) == 0:
+            continue
+        return df.reset_index(drop=True), v
+    return None, None
 
 
 def settlement_oficial(fecha):
@@ -355,38 +428,6 @@ def sesion_liquidada(fecha):
     return dt.datetime.now(ny) >= corte
 
 
-def descargar_tv(nombre):
-    """Devuelve DataFrame [fecha, close, settle(NaN)] o None. TradingView, solo Close."""
-    try:
-        from tvDatafeed import TvDatafeed, Interval
-    except Exception:
-        return None
-    for intento in range(REINTENTOS_TV):
-        try:
-            tv = TvDatafeed()
-            df = tv.get_hist(symbol=nombre, exchange="CBOE",
-                             interval=Interval.in_daily, n_bars=5000)
-            if df is not None and len(df) > 0:
-                out = pd.DataFrame({
-                    "fecha": pd.to_datetime(df.index).normalize(),
-                    "close": pd.to_numeric(df["close"], errors="coerce"),
-                    "settle": pd.NA,
-                })
-                out = out[out["close"].fillna(0) > 0]
-                # FUERA la sesion que todavia no ha liquidado. Sin esto, una
-                # corrida a media sesion mete el ultimo precio negociado como si
-                # fuera el cierre oficial, y manana ya es historia: la vara del
-                # percentil queda contaminada con un dato que nunca existio.
-                out = out[[sesion_liquidada(f) for f in out["fecha"]]]
-                if len(out) == 0:
-                    return None
-                return out.sort_values("fecha").reset_index(drop=True)
-        except Exception:
-            pass
-        time.sleep(PAUSA_TV * (intento + 1))
-    return None
-
-
 def obtener_contrato(nombre, anio, mes, codigo, refresh, solo_cboe, dry_run,
                      vivo=False):
     """Devuelve (DataFrame, fuente).
@@ -398,50 +439,54 @@ def obtener_contrato(nombre, anio, mes, codigo, refresh, solo_cboe, dry_run,
       - contrato VIVO -> SIEMPRE fresco, sin caer a la cache. Si no se puede
         bajar, quien llama debe PARAR (no hay dato de hoy y publicar el de ayer
         como si fuera de hoy es justo lo que mato al sistema anterior).
+    Y desde el 2026-09-23: la cache solo vale si su fuente es OFICIAL. Una cache
+    de TradingView se ignora y el contrato se vuelve a bajar del CBOE.
+    `solo_cboe` se conserva por compatibilidad: ya todo es CBOE.
     """
     ruta = os.path.join(CACHE, nombre + ".csv")
     if os.path.exists(ruta) and not refresh and not vivo:
         df = pd.read_csv(ruta)
         df["fecha"] = pd.to_datetime(df["fecha"])
         fuente = df["fuente"].iloc[0] if "fuente" in df.columns and len(df) else "cache"
-        return df, fuente
+        if fuente in FUENTES_OFICIALES:
+            return df, fuente
 
     if dry_run:
         return None, "dry-run"
 
-    df, fuente = None, None
+    df, fuente, venc_oficial = None, None, None
     if (anio, mes) <= CBOE_HASTA:
         df = descargar_cboe(codigo, anio)
         if df is not None:
             fuente = "CBOE"
-            # El archivo de CBOE esta TRUNCADO para los contratos de marzo a
-            # agosto de 2018: los seis acaban el 2018-02-23. Sin esto, medio ano
-            # se quedaba sin M1..M6 y la serie no protestaba, solo dejaba huecos.
+            # El archivo antiguo esta TRUNCADO para los contratos de marzo a agosto
+            # de 2018: los seis acaban el 2018-02-23. Sin esto, medio ano se quedaba
+            # sin M1..M6 y la serie no protestaba, solo dejaba huecos. La cola sale
+            # ahora del fichero oficial nuevo (antes, de TradingView).
             venc = pd.Timestamp(vencimiento_teorico(anio, mes))
             ya_vencido = venc < pd.Timestamp(dt.date.today())
             corte = df["fecha"].max()
-            if ya_vencido and (venc - corte).days > TOL_COLA and not solo_cboe:
-                cola = descargar_tv(nombre)
+            if ya_vencido and (venc - corte).days > TOL_COLA:
+                cola, venc_oficial = descargar_cboe_hist(venc)
                 if cola is not None:
                     cola = cola[cola["fecha"] > corte]
                     if len(cola):
                         df = pd.concat([df, cola], ignore_index=True)
                         df = df.sort_values("fecha").reset_index(drop=True)
-                        fuente = "CBOE+TV"
-                        print("      %s: CBOE cortaba el %s y el vencimiento es el "
-                              "%s -> +%d dias de TradingView"
+                        fuente = "CBOE+HIST"
+                        print("      %s: el archivo antiguo cortaba el %s y el vencimiento "
+                              "es el %s -> +%d dias del fichero oficial"
                               % (nombre, corte.date(), venc.date(), len(cola)))
-                time.sleep(PAUSA_TV)
-    if df is None and not solo_cboe:
-        df = descargar_tv(nombre)
+    if df is None:
+        df, venc_oficial = descargar_cboe_hist(vencimiento_teorico(anio, mes))
         if df is not None:
-            fuente = "TV"
-        time.sleep(PAUSA_TV)
+            fuente = "CBOE_HIST"
 
     if df is None:
         return None, None
 
     df["fuente"] = fuente
+    df["venc_oficial"] = venc_oficial if venc_oficial is not None else pd.NaT
     csv_atomico(df, ruta, index=False)
     return df, fuente
 
@@ -459,7 +504,7 @@ def construir(refresh=False, solo_cboe=False, limite=None, dry_run=False):
     if dry_run:
         print("DRY-RUN: no se descarga ni se escribe nada.")
         for nombre, a, m, cod, venc in contratos[:5]:
-            origen = "CBOE" if (a, m) <= CBOE_HASTA else "TV"
+            origen = "CBOE" if (a, m) <= CBOE_HASTA else "CBOE_HIST"
             print("  %s  venc_teorico=%s  fuente_prevista=%s" % (nombre, venc, origen))
         print("  ... y %d mas" % max(0, len(contratos) - 5))
         return None
@@ -526,29 +571,41 @@ def construir(refresh=False, solo_cboe=False, limite=None, dry_run=False):
         print("\nRecorte por ventana (>= %s): %d filas fuera, quedan %d"
               % (FECHA_INICIO.date(), antes - len(largo), len(largo)))
 
-    # vencimiento efectivo: para contratos ya vencidos, la ultima fecha observada;
-    # para los vivos, la regla teorica.
+    # vencimiento efectivo, por orden de confianza:
+    #   1) el OFICIAL: el nombre del fichero del CBOE con el que respondio el contrato;
+    #   2) contratos del archivo antiguo ya vencidos: su ultima fecha, que en ese
+    #      archivo incluye el dia de liquidacion;
+    #   3) el resto (no deberia quedar ninguno vivo sin fecha oficial): la regla.
     hoy = pd.Timestamp(dt.date.today())
     ultima_obs = largo.groupby("contrato")["fecha"].max()
     venc_teo = largo.groupby("contrato")["venc_teorico"].first()
+    if "venc_oficial" not in largo.columns:
+        largo["venc_oficial"] = pd.NaT
+    largo["venc_oficial"] = pd.to_datetime(largo["venc_oficial"], errors="coerce")
+    venc_of = largo.groupby("contrato")["venc_oficial"].first()
     vencido = ultima_obs < (hoy - pd.Timedelta(days=5))
     venc_efec = venc_teo.copy()
     venc_efec[vencido] = ultima_obs[vencido]
+    tiene_of = venc_of.notna()
+    venc_efec[tiene_of] = venc_of[tiene_of]
 
-    # control de sanidad: regla vs observado en los ya vencidos
-    dif = (venc_teo[vencido] - ultima_obs[vencido]).dt.days.abs()
-    if len(dif):
-        print("\nControl vencimientos (solo contratos vencidos, n=%d):" % len(dif))
-        print("  coincide exacto: %d   |  difiere 1-3 dias: %d  |  difiere >3 dias: %d"
-              % ((dif == 0).sum(), ((dif > 0) & (dif <= 3)).sum(), (dif > 3).sum()))
+    # control de sanidad: regla vs fecha efectiva
+    dif = (venc_teo - venc_efec).dt.days.abs()
+    print("\nControl vencimientos (n=%d, %d con fecha oficial del CBOE):"
+          % (len(dif), int(tiene_of.sum())))
+    print("  regla = efectiva: %d   |  difiere 1-3 dias: %d  |  difiere >3 dias: %d"
+          % ((dif == 0).sum(), ((dif > 0) & (dif <= 3)).sum(), (dif > 3).sum()))
+    for c in dif[dif > 0].index:
+        print("    %s  regla %s  efectiva %s%s"
+              % (c, venc_teo[c].date(), venc_efec[c].date(),
+                 "  (oficial)" if tiene_of.get(c, False) else ""))
 
     largo["vencimiento"] = largo["contrato"].map(venc_efec)
 
-    # PRECIO CANONICO = SETTLE (precio de liquidacion oficial), con Close de respaldo.
-    # Medido contra la pestana Inclinacion del VIX Studio (2026-09-21): en el tramo
-    # CBOE su serie coincide 99.9% con Settle y solo 50.7% con Close. En el tramo
-    # TradingView no hay Settle, pero su Close diario ya ES el de liquidacion (87.1%
-    # de coincidencia, y el resto se explica por el dia del roll).
+    # PRECIO CANONICO = SETTLE (liquidacion oficial), con Close solo de respaldo para
+    # algun dia suelto sin Settle del archivo antiguo. Medido contra la pestana
+    # Inclinacion del VIX Studio (2026-09-21): en el tramo CBOE su serie coincide
+    # 99.9% con Settle y solo 50.7% con Close.
     settle = pd.to_numeric(largo["settle"], errors="coerce")
     close = pd.to_numeric(largo["close"], errors="coerce")
     largo["precio"] = settle.where(settle > 0, close)
@@ -564,12 +621,19 @@ def construir(refresh=False, solo_cboe=False, limite=None, dry_run=False):
         print("  identicos: %.2f%%   |  dif mediana: %.4f   |  dif max: %.4f"
               % (100.0 * (d < 1e-9).mean(), d.median(), d.max()))
 
-    # FILTRO DE DIAS FANTASMA (anadido 2026-09-21).
-    # TradingView emite barras diarias para la sesion nocturna del domingo y para
-    # algun festivo: en la primera version colaron 45 filas en DOMINGO (0,9% de la
-    # serie), fechas en las que el exchange no liquido nada. Ensucian la historia
-    # contra la que se calculan los percentiles. Se filtran con el calendario real
-    # del CFE; si la libreria no esta, al menos caen sabados y domingos.
+    # FILTRO DE DIAS FANTASMA (anadido 2026-09-21, acotado el 2026-09-23).
+    # Existia por TradingView, que emite barras para la sesion nocturna del domingo y
+    # para algun festivo. Con fuentes OFICIALES ya no aplica: si el exchange publico
+    # una liquidacion para una fecha, esa fecha es una sesion, diga lo que diga la
+    # libreria de calendario. Aplicarle el filtro borraria dias buenos (la libreria
+    # da por cerrado, por ejemplo, el 2018-12-05, y el CBOE liquido). Por eso ahora
+    # solo filtra lo que NO sea oficial; con lo oficial solo cuenta y lo dice.
+    # Los sabados y domingos se tiran siempre: ahi no hay liquidacion posible.
+    finde = largo["fecha"].dt.dayofweek >= 5
+    if finde.any():
+        print("\nAVISO: %d filas en sabado/domingo descartadas" % int(finde.sum()))
+        largo = largo[~finde]
+    oficial = largo["fuente"].isin(FUENTES_OFICIALES)
     antes_cal = len(largo)
     dias_ok = None
     try:
@@ -587,12 +651,19 @@ def construir(refresh=False, solo_cboe=False, limite=None, dry_run=False):
     except ImportError:
         pass
     if dias_ok:
-        largo = largo[largo["fecha"].isin(dias_ok)]
+        fuera_cal = ~largo["fecha"].isin(dias_ok)
+        if (fuera_cal & oficial).any():
+            print("  %d filas OFICIALES en dias que el calendario da por cerrados "
+                  "(se conservan: manda el exchange): %s"
+                  % (int((fuera_cal & oficial).sum()),
+                     ", ".join(sorted(set(str(d.date()) for d in
+                                          largo.loc[fuera_cal & oficial, "fecha"])))[:200]))
+        largo = largo[~fuera_cal | oficial]
     else:
-        largo = largo[largo["fecha"].dt.dayofweek < 5]
         print("\nSin libreria de calendario: solo se filtran sabados y domingos.")
     if antes_cal != len(largo):
-        print("  filas en dias sin sesion descartadas: %d" % (antes_cal - len(largo)))
+        print("  filas NO oficiales en dias sin sesion descartadas: %d"
+              % (antes_cal - len(largo)))
 
     # pivote: por cada fecha, ordenar contratos vivos por vencimiento -> M1..M8
     # ROLL: el contrato deja de ser M1 EL MISMO dia de su vencimiento (liquida por la
@@ -662,8 +733,22 @@ def main():
     f_limpio = os.path.join(DATA, "vix_futuros_M1_M8.csv")
     f_det = os.path.join(DATA, "vix_futuros_M1_M8_detalle.csv")
 
+    # HOMOGENEIDAD: la historia es SOLO liquidacion oficial. Si algo no oficial se
+    # colara (una cache vieja, una fuente nueva mal cableada), se para: mezclar dos
+    # definiciones de precio en la misma vara es justo lo que se acaba de arreglar.
+    no_oficial = ~largo["fuente"].isin(FUENTES_OFICIALES)
+    if no_oficial.any():
+        estado.fallar("descarga",
+                      "%d filas de fuente NO oficial (%s): la historia tiene que ser "
+                      "solo liquidacion del CBOE. No se escribe nada."
+                      % (int(no_oficial.sum()),
+                         ", ".join(sorted(largo.loc[no_oficial, "fuente"].astype(str).unique()))))
+
+    for c in ("volumen", "oi"):
+        if c not in largo.columns:
+            largo[c] = np.nan
     csv_atomico(largo[["fecha", "contrato", "vencimiento", "close", "settle",
-                       "fuente"]], f_largo, index=False)
+                       "fuente", "volumen", "oi"]], f_largo, index=False)
     csv_atomico(limpio, f_limpio, index=False)
     csv_atomico(detalle, f_det, index=False)
 
@@ -704,7 +789,8 @@ def main():
                      "contratos_fallidos": fallidos,
                      "aun_no_listados": no_listados,
                      "meses_ultimo_dia": int(limpio.iloc[-1][
-                         [c for c in limpio.columns if c.startswith("M")]].notna().sum())})
+                         [c for c in limpio.columns if c.startswith("M")]].notna().sum())},
+                    marca_ok=False)   # una etapa intermedia no certifica la cadena
 
     print("\nEscrito:")
     print("  %s" % f_limpio)

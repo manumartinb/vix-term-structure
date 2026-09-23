@@ -4,8 +4,12 @@ vivo.py -- la foto INTRADIA de la curva, percentileada contra la historia cerrad
 QUE HACE
 Pide los 8 contratos vivos EN UNA SOLA VENTANA de pocos segundos, calcula las 28
 parejas de ese instante y las situa contra el historico de dias ANTERIORES. El
-resultado es PROVISIONAL: por la noche entra el settlement de verdad y ese es el
-que pasa a ser historia. El dato en vivo nunca se mete en la vara.
+resultado es PROVISIONAL: a la manana siguiente entra la liquidacion oficial del
+CBOE y esa es la que pasa a ser historia. El dato en vivo nunca se mete en la vara.
+Por eso este es el UNICO sitio del sistema que sigue usando TradingView: sus velas
+de 5 minutos se juzgan por antiguedad (hora local contra hora local), no por fecha,
+y no les afecta el desfase de las velas DIARIAS que obligo a sacar TradingView de la
+historia el 2026-09-23.
 
 POR QUE DE UNA EN UNA Y NO EN PARALELO (medido el 2026-09-22)
 Con 8 peticiones simultaneas sobre la misma conexion de TradingView, 2 de las 8
@@ -284,7 +288,7 @@ def main():
             dict((c, d["pct"]) for c, d in v["pares"].items()
                  if d["pct"] is not None))) + "</pre>"]
         lin.append("Provisional: %d/%d patas en vivo, ventana %.1f s. "
-                   "El dato firme entra esta noche."
+                   "El dato firme (liquidacion oficial) entra manana a primera hora."
                    % (v["patas_en_vivo"], v["patas_total"], v["ventana_s"]))
         estado.avisar("\n".join(lin))
         print("Aviso enviado (%d altos, %d bajos)." % (len(alt), len(baj)))

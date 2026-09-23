@@ -117,8 +117,8 @@ def vara(valores, dte):
 
     Es el mismo estado que percentil_condicional tiene al terminar de recorrer
     la serie. Se usa para consultar un valor de HOY contra la historia previa
-    sin meterlo dentro (el dato en vivo es provisional: por la noche entra el
-    settlement de verdad y ese si pasa a ser historia)."""
+    sin meterlo dentro (el dato en vivo es provisional: a la manana siguiente entra
+    la liquidacion oficial y esa si pasa a ser historia)."""
     listas = {}
     for v, t in zip(valores, dte):
         if v is None or (isinstance(v, float) and np.isnan(v)) or np.isnan(t):
