@@ -39,6 +39,11 @@ La ultima sesion del CFE ANTERIOR a hoy (la de ayer; el lunes, la del viernes).
     se sale sin alarma; la corrida de las 11:00 lo vuelve a probar.
   - Si en el ULTIMO intento (desde las 11:00) sigue sin estar: no se publica, pero
     SI se avisa. Callarse ahi seria saltarse en silencio justo los dias malos.
+  - Si la serie avanza pero se queda corta (el CBOE trae una sesion vieja y no la
+    ultima): se publica lo que hay y, en el ULTIMO intento, se avisa "DATO
+    ATRASADO". Sin ese aviso, un CBOE que va ~1 dia tarde de forma sostenida dejaba
+    el radar con fecha atrasada y el estado en ok dia tras dia (debate cruzado del
+    2026-09-23, ronda 2, P7).
 
 CREDENCIALES
 No hay que configurar nada: TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID ya estan en
@@ -274,9 +279,20 @@ def main():
                 sys.exit(1)
             # Avanzo, pero no hasta la sesion que tocaba: el CBOE se ha saltado una
             # o el calendario cuenta como sesion un dia que no lo fue. Se publica lo
-            # que hay y queda escrito.
+            # que hay (es correcto y mas nuevo que lo de ayer) y queda escrito.
             registrar("AVISO: la serie avanza al %s pero la sesion que tocaba era el %s"
                       % (despues, objetivo.date()))
+            if ultimo:
+                # En el ultimo intento el log no basta: si el CBOE va ~1 dia tarde de
+                # forma sostenida, esta rama se repite cada manana y, sin aviso, el
+                # usuario recibe el radar de anteayer con el estado en ok (medido: 1
+                # alarma y luego 3 dias callado). Best-effort, como los demas avisos;
+                # la publicacion sigue adelante.
+                estado.avisar("<b>VIX CURVE - DATO ATRASADO</b>\n\n"
+                              "Se publica la sesion del <b>%s</b>, pero la que tocaba era "
+                              "la del <b>%s</b>: el CBOE aun no la ha colgado (ultimo intento "
+                              "de la manana). El radar que llega a continuacion va con esa "
+                              "fecha." % (despues, objetivo.date()))
 
         paso("sitio", [PYTHON, "construir_sitio.py"], dry=dry)
         if not dry:
