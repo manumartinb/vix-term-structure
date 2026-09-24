@@ -229,6 +229,15 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
       <em>contango</em> pronunciado, calma, nadie teme nada a un mes vista. Y como el
       percentil es condicional, un 95 quiere decir "extremo <strong>para este punto del
       ciclo mensual</strong>", no extremo en absoluto.
+      <br><strong>DE DONDE SALE EL CONTADO.</strong> Del cierre <strong>oficial</strong> del
+      indice VIX que publica el propio Cboe. Un dia sin cierre oficial se queda sin base: no
+      se rellena con el anterior.
+      <br><strong>CORREGIDO EL 24-SEP-2026</strong>: hasta esa fecha el contado venia de Yahoo,
+      que tenia 12 cierres distintos del oficial (el 6-feb-2026, 20,37 frente a 17,76), le
+      faltaban dias y alguna vez guardo como cierre la lectura de antes de la apertura. Con el
+      dato oficial cambian 406 de los 4.255 percentiles de esta base, casi todos en un punto o
+      menos; 8 cambian mas de un punto y 5 mas de cinco (hasta 46,8). El 22-sep el panel daba
+      14 y el dato bueno es 3: un extremo que no se veia.
       <br><strong>POR QUE SOLO ESTA.</strong> Antes habia tres (M1/contado, la misma
       dividida por los dias que quedaban, y esta). Medidas entre si daban correlacion de
       <strong>0,85 a 0,94</strong> y coincidian de zona el 78-87% de los dias: eran la
@@ -255,7 +264,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   ese dia. <b>Reescalado de 2007</b>: hasta el
   23-mar-2007 los futuros del VIX cotizaban a diez veces el indice; esta serie arranca despues
   del cambio para no mezclar escalas.</p>
-  <p>Generado el 2026-09-24 08:00 &middot; datos de mercado publicos, sin garantia de exactitud y
+  <p>Generado el 2026-09-24 09:10 &middot; datos de mercado publicos, sin garantia de exactitud y
   sin fin comercial &middot; esto no es asesoramiento de inversion.</p>
 </div>
 
@@ -447,7 +456,9 @@ async function load(){
             '<span class="zona ' + m.zona + '">' + m.racha + ' dias en ' +
               zonaTxt[m.zona] + '</span>' +
             '<span class="pane-now" style="color:' + m.color + '">' +
-              (m.hoy !== null ? Math.round(m.hoy) : '--') + '</span>' +
+              (m.hoy !== null ? Math.round(m.hoy) : '--') +
+              (m.fecha && m.fecha !== d.ultimo
+                ? '<span class="sub"> del ' + esc(m.fecha) + '</span>' : '') + '</span>' +
           '</div>' +
         '</div>' +
         '<div class="plot" id="x-' + m.fam + '-' + m.par + '"></div>';

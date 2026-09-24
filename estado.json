@@ -2,10 +2,10 @@
   "ok": true,
   "etapa": "sitio",
   "detalle": "completo",
-  "momento": "2026-09-24 08:00:50",
-  "momento_utc": "2026-09-24T06:00:50Z",
-  "ultima_ok": "2026-09-24 08:00:50",
-  "ultima_ok_utc": "2026-09-24T06:00:50Z",
+  "momento": "2026-09-24 09:10:24",
+  "momento_utc": "2026-09-24T07:10:24Z",
+  "ultima_ok": "2026-09-24 09:10:24",
+  "ultima_ok_utc": "2026-09-24T07:10:24Z",
   "degradaciones": [],
   "ultimo_dia_panel": "2026-09-23"
 }

@@ -147,38 +147,86 @@ def series_convexidad(serie):
     return pd.DataFrame(out, index=serie.index)
 
 
+# Cierre OFICIAL del indice VIX, publicado por el propio Cboe. OJO con el host: la misma
+# ruta en cdn.cboe.com sirve una copia de CloudFront con un dia de retraso (medido el
+# 2026-09-24: acababa en el 22-sep cuando cdn-api ya traia el 23, colgado a las 00:31 GMT).
+VIX_OFICIAL_URL = "https://cdn-api.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
+
+
+def _bajar_vix_oficial():
+    """Serie de cierres oficiales del indice VIX (columna CLOSE del fichero del Cboe)."""
+    import urllib.request
+    req = urllib.request.Request(VIX_OFICIAL_URL, headers={"User-Agent": "Mozilla/5.0"})
+    raw = urllib.request.urlopen(req, timeout=60).read()
+    df = pd.read_csv(io.BytesIO(raw))
+    idx = pd.to_datetime(df["DATE"], format="%m/%d/%Y")
+    s = pd.Series(pd.to_numeric(df["CLOSE"], errors="coerce").values, index=idx, name="VIX")
+    s = s[s > 0].sort_index()
+    if len(s) < 5000 or s.index.duplicated().any():
+        raise ValueError("fichero del Cboe inesperado (%d cierres)" % len(s))
+    return s
+
+
 def cargar_vix_spot(fechas):
-    """Cierre del indice VIX al contado (^VIX), cacheado."""
-    cache = os.path.join(SITIO_DATA, "vix_spot.csv")
-    spot = None
+    """Cierre OFICIAL del indice VIX (Cboe), alineado a las fechas de la curva.
+
+    HASTA EL 2026-09-24 VENIA DE YAHOO (^VIX), Y ESO PUBLICABA LA BASE MAL
+    (reauditoria de Codex del 24-sep, verificada aparte con el mismo calculo):
+      - 12 cierres distintos del oficial; el peor, 6-feb-2026: 20,37 frente a 17,76;
+      - una descarga hecha de dia guardaba la lectura de ANTES de la apertura como si
+        fuera el cierre (22-sep: 14,84; el oficial es 14,21) y la cache la daba por buena;
+      - al re-descargar, Yahoo omitia dias (22-sep) y el ffill los rellenaba con el
+        anterior sin avisar: la historia publicada cambiaba sola.
+    Resultado: 167 de 4.255 percentiles de la base distintos, hasta 46,8 puntos, y el
+    22-sep escondia un extremo (14,1 publicado, 2,8 con el dato oficial).
+
+    REGLAS:
+      - Fuente unica, el fichero oficial. Si el Cboe no responde se usa la copia guardada
+        de ese mismo fichero, nunca otra fuente.
+      - Un dia de la curva sin cierre oficial queda SIN base (NaN), nunca relleno. Hay dos
+        historicos conocidos (2015-04-03 y 2018-12-05: hubo liquidacion de futuros pero no
+        se calculo el indice). Si le falta al ULTIMO dia (el Cboe aun no lo ha colgado),
+        se avisa en el panel; la corrida siguiente lo rellena sola.
+      - Si el Cboe retira o cambia un cierre que ya estaba guardado, se avisa en el panel."""
+    cache = os.path.join(SITIO_DATA, "vix_spot_cboe.csv")
+    previa = None
     if os.path.exists(cache):
         try:
-            c = pd.read_csv(cache, parse_dates=["Fecha"]).set_index("Fecha")["VIX"]
-            if len(c) and c.index.max() >= fechas[-1]:
-                spot = c
-                print("  VIX spot desde cache (%d dias)" % len(c))
+            previa = pd.read_csv(cache, parse_dates=["Fecha"]).set_index("Fecha")["VIX"]
         except Exception:
-            spot = None
-    if spot is None:
-        try:
-            import yfinance as yf
-            print("  descargando ^VIX...")
-            d = yf.download("^VIX", start="2007-01-01", progress=False, auto_adjust=True)
-            cl = d["Close"]
-            if hasattr(cl, "columns"):
-                cl = cl.iloc[:, 0]
-            cl.index = pd.to_datetime(cl.index).tz_localize(None).normalize()
-            spot = cl.dropna()
-            spot.name = "VIX"
-            csv_atomico(spot.rename_axis("Fecha").to_frame("VIX"), cache)
-            print("  VIX spot descargado (%d dias)" % len(spot))
-        except Exception as e:
+            previa = None
+    try:
+        spot = _bajar_vix_oficial()
+        print("  VIX oficial del Cboe: %d cierres, hasta %s"
+              % (len(spot), spot.index[-1].date()))
+    except Exception as e:
+        if previa is None or not len(previa):
             print("  AVISO: sin VIX al contado (%s)" % str(e)[:60])
-            DEGRADACIONES.append("Sin el VIX al contado: la seccion de la base "
+            DEGRADACIONES.append("Sin el cierre oficial del VIX: la seccion de la base "
                                  "(BASE_CM30) no se ha podido calcular (%s)."
                                  % str(e)[:60])
             return None
-    return spot.reindex(pd.DatetimeIndex(fechas)).ffill()
+        spot = previa
+        print("  AVISO: el Cboe no responde (%s); VIX desde la copia guardada, hasta %s"
+              % (str(e)[:60], spot.index[-1].date()))
+    else:
+        if previa is not None and len(previa):
+            comun = previa.index.intersection(spot.index)
+            retiradas = list(previa.index.difference(spot.index))
+            cambiadas = list(comun[(previa[comun] - spot[comun]).abs().values > 0.005])
+            if retiradas or cambiadas:
+                DEGRADACIONES.append(
+                    "El Cboe ha retirado %d y cambiado %d cierres del VIX que ya estaban "
+                    "guardados (%s); la base se ha recalculado con los suyos."
+                    % (len(retiradas), len(cambiadas),
+                       ", ".join(str(x.date()) for x in (retiradas + cambiadas)[:6])))
+        csv_atomico(spot.rename_axis("Fecha").to_frame("VIX"), cache)
+    ali = spot.reindex(pd.DatetimeIndex(fechas))
+    if pd.isna(ali.iloc[-1]):
+        DEGRADACIONES.append("La base del %s queda sin calcular: el Cboe aun no ha colgado "
+                             "el cierre oficial del VIX de ese dia."
+                             % pd.Timestamp(fechas[-1]).date())
+    return ali
 
 
 def series_base(serie, detalle):
@@ -355,6 +403,10 @@ def main():
             meta_extra.append({
                 "fam": fam, "par": c,
                 "hoy": None if np.isnan(v) else round(float(v), 1),
+                # fecha de ese valor: si no es la del ultimo dia del panel (base sin cierre
+                # oficial del VIX todavia, o curva sin M8), la web lo dice en vez de
+                # hacerlo pasar por el de hoy
+                "fecha": vv.index[-1].strftime("%Y-%m-%d") if len(vv) else None,
                 "color": color_pct(v),
                 "mediana": round(float(vv.median()), 1) if len(vv) else None,
                 "racha": n, "zona": z,
@@ -669,6 +721,15 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
       <em>contango</em> pronunciado, calma, nadie teme nada a un mes vista. Y como el
       percentil es condicional, un 95 quiere decir "extremo <strong>para este punto del
       ciclo mensual</strong>", no extremo en absoluto.
+      <br><strong>DE DONDE SALE EL CONTADO.</strong> Del cierre <strong>oficial</strong> del
+      indice VIX que publica el propio Cboe. Un dia sin cierre oficial se queda sin base: no
+      se rellena con el anterior.
+      <br><strong>CORREGIDO EL 24-SEP-2026</strong>: hasta esa fecha el contado venia de Yahoo,
+      que tenia 12 cierres distintos del oficial (el 6-feb-2026, 20,37 frente a 17,76), le
+      faltaban dias y alguna vez guardo como cierre la lectura de antes de la apertura. Con el
+      dato oficial cambian 406 de los 4.255 percentiles de esta base, casi todos en un punto o
+      menos; 8 cambian mas de un punto y 5 mas de cinco (hasta 46,8). El 22-sep el panel daba
+      14 y el dato bueno es 3: un extremo que no se veia.
       <br><strong>POR QUE SOLO ESTA.</strong> Antes habia tres (M1/contado, la misma
       dividida por los dias que quedaban, y esta). Medidas entre si daban correlacion de
       <strong>0,85 a 0,94</strong> y coincidian de zona el 78-87% de los dias: eran la
@@ -887,7 +948,9 @@ async function load(){
             '<span class="zona ' + m.zona + '">' + m.racha + ' dias en ' +
               zonaTxt[m.zona] + '</span>' +
             '<span class="pane-now" style="color:' + m.color + '">' +
-              (m.hoy !== null ? Math.round(m.hoy) : '--') + '</span>' +
+              (m.hoy !== null ? Math.round(m.hoy) : '--') +
+              (m.fecha && m.fecha !== d.ultimo
+                ? '<span class="sub"> del ' + esc(m.fecha) + '</span>' : '') + '</span>' +
           '</div>' +
         '</div>' +
         '<div class="plot" id="x-' + m.fam + '-' + m.par + '"></div>';

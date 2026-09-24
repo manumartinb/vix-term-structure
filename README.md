@@ -90,6 +90,22 @@ contrato a contrato. No de cierre: difieren en tres de cada cuatro días.
 - Donde las dos fuentes se solapan (6.909 precios de 2013 a 2018) coinciden **al cuarto
   decimal**. El vencimiento de cada contrato es el que publica el propio exchange.
 
+**La base (`BASE_CM30`)** compara esa curva con el VIX al contado, que es el **cierre oficial
+del índice** publicado por el propio Cboe
+(`cdn-api.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv`). Un día sin cierre
+oficial del índice se queda sin base y nunca se rellena con el anterior: pasa el 2015-04-03 y
+el 2018-12-05, días en que hubo liquidación de futuros pero no se calculó el VIX.
+
+### Corrección del 24-sep-2026: la base usaba el VIX de Yahoo
+
+Hasta el 24-sep-2026 la base tomaba el VIX al contado de Yahoo. Contrastado con el cierre
+oficial del Cboe, Yahoo tenía 12 cierres distintos (el peor, el 6-feb-2026: 20,37 frente a
+17,76), le faltaban días que se rellenaban con el anterior sin avisar y alguna vez guardó
+como cierre la lectura de antes de la apertura. Con el dato oficial cambian 406 de los 4.255
+percentiles de la base: 398 en un punto o menos, 8 en más de uno y 5 en más de cinco (hasta
+46,8). El 22-sep el panel mostraba 14,1 y el dato bueno es 2,8, un extremo que no se veía.
+La curva y los 28 pares no usan el contado y no cambian.
+
 ### Corrección del 23-sep-2026: desfase de fechas en el tramo de TradingView
 
 Hasta el 23-sep-2026, el tramo de septiembre de 2018 en adelante (y esos 16 contratos de
