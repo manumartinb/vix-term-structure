@@ -1,6 +1,6 @@
 {
- "momento": "2026-09-24 21:15:06",
- "ventana_s": 3.96,
+ "momento": "2026-09-24 21:30:09",
+ "ventana_s": 5.22,
  "todas_a_la_vez": true,
  "patas_en_vivo": 8,
  "patas_total": 8,
@@ -12,37 +12,37 @@
    "hueco": "M1",
    "contrato": "VXV2026",
    "vencimiento": "2026-10-21",
-   "precio": 17.75,
+   "precio": 17.78,
    "origen": "vivo",
-   "edad_min": 15.1,
-   "vela": "2026-09-24 21:00"
+   "edad_min": 15.2,
+   "vela": "2026-09-24 21:15"
   },
   {
    "hueco": "M2",
    "contrato": "VXX2026",
    "vencimiento": "2026-11-18",
-   "precio": 18.5,
+   "precio": 18.51,
    "origen": "vivo",
-   "edad_min": 15.1,
-   "vela": "2026-09-24 21:00"
+   "edad_min": 15.2,
+   "vela": "2026-09-24 21:15"
   },
   {
    "hueco": "M3",
    "contrato": "VXZ2026",
    "vencimiento": "2026-12-16",
-   "precio": 18.86,
+   "precio": 18.87,
    "origen": "vivo",
-   "edad_min": 15.1,
-   "vela": "2026-09-24 21:00"
+   "edad_min": 20.2,
+   "vela": "2026-09-24 21:10"
   },
   {
    "hueco": "M4",
    "contrato": "VXF2027",
    "vencimiento": "2027-01-20",
-   "precio": 19.57,
+   "precio": 19.55,
    "origen": "vivo",
-   "edad_min": 15.1,
-   "vela": "2026-09-24 21:00"
+   "edad_min": 20.2,
+   "vela": "2026-09-24 21:10"
   },
   {
    "hueco": "M5",
@@ -50,8 +50,8 @@
    "vencimiento": "2027-02-17",
    "precio": 20.02,
    "origen": "vivo",
-   "edad_min": 15.1,
-   "vela": "2026-09-24 21:00"
+   "edad_min": 20.2,
+   "vela": "2026-09-24 21:10"
   },
   {
    "hueco": "M6",
@@ -59,8 +59,8 @@
    "vencimiento": "2027-03-17",
    "precio": 20.25,
    "origen": "vivo",
-   "edad_min": 20.1,
-   "vela": "2026-09-24 20:55"
+   "edad_min": 20.2,
+   "vela": "2026-09-24 21:10"
   },
   {
    "hueco": "M7",
@@ -68,7 +68,7 @@
    "vencimiento": "2027-04-21",
    "precio": 20.6,
    "origen": "vivo",
-   "edad_min": 40.1,
+   "edad_min": 55.2,
    "vela": "2026-09-24 20:35"
   },
   {
@@ -77,140 +77,140 @@
    "vencimiento": "2027-05-18",
    "precio": 20.78,
    "origen": "vivo",
-   "edad_min": 50.1,
+   "edad_min": 65.2,
    "vela": "2026-09-24 20:25"
   }
  ],
  "pares": {
   "M2/M1": {
-   "pct": 58.4,
-   "ratio": 0.042254,
+   "pct": 59.1,
+   "ratio": 0.041057,
    "obs": 763,
    "fiable": true
   },
   "M3/M1": {
-   "pct": 63.3,
-   "ratio": 0.062535,
+   "pct": 63.8,
+   "ratio": 0.061305,
    "obs": 763,
    "fiable": true
   },
   "M4/M1": {
-   "pct": 50.4,
-   "ratio": 0.102535,
+   "pct": 52.1,
+   "ratio": 0.09955,
    "obs": 763,
    "fiable": true
   },
   "M5/M1": {
-   "pct": 48.6,
-   "ratio": 0.127887,
+   "pct": 49.5,
+   "ratio": 0.125984,
    "obs": 763,
    "fiable": true
   },
   "M6/M1": {
-   "pct": 51.5,
-   "ratio": 0.140845,
+   "pct": 51.9,
+   "ratio": 0.13892,
    "obs": 755,
    "fiable": true
   },
   "M7/M1": {
-   "pct": 48.9,
-   "ratio": 0.160563,
+   "pct": 49.9,
+   "ratio": 0.158605,
    "obs": 745,
    "fiable": true
   },
   "M8/M1": {
-   "pct": 50.3,
-   "ratio": 0.170704,
+   "pct": 50.9,
+   "ratio": 0.168729,
    "obs": 681,
    "fiable": true
   },
   "M3/M2": {
    "pct": 63.0,
-   "ratio": 0.019459,
+   "ratio": 0.019449,
    "obs": 763,
    "fiable": true
   },
   "M4/M2": {
-   "pct": 42.5,
-   "ratio": 0.057838,
+   "pct": 43.7,
+   "ratio": 0.056186,
    "obs": 763,
    "fiable": true
   },
   "M5/M2": {
    "pct": 40.2,
-   "ratio": 0.082162,
+   "ratio": 0.081578,
    "obs": 763,
    "fiable": true
   },
   "M6/M2": {
-   "pct": 43.9,
-   "ratio": 0.094595,
+   "pct": 44.2,
+   "ratio": 0.094003,
    "obs": 755,
    "fiable": true
   },
   "M7/M2": {
-   "pct": 41.1,
-   "ratio": 0.113514,
+   "pct": 41.4,
+   "ratio": 0.112912,
    "obs": 745,
    "fiable": true
   },
   "M8/M2": {
    "pct": 42.1,
-   "ratio": 0.123243,
+   "ratio": 0.122636,
    "obs": 681,
    "fiable": true
   },
   "M4/M3": {
-   "pct": 18.4,
-   "ratio": 0.037646,
+   "pct": 22.0,
+   "ratio": 0.036036,
    "obs": 763,
    "fiable": true
   },
   "M5/M3": {
-   "pct": 26.6,
-   "ratio": 0.061506,
+   "pct": 26.8,
+   "ratio": 0.060943,
    "obs": 763,
    "fiable": true
   },
   "M6/M3": {
    "pct": 32.0,
-   "ratio": 0.073701,
+   "ratio": 0.073132,
    "obs": 755,
    "fiable": true
   },
   "M7/M3": {
-   "pct": 32.0,
-   "ratio": 0.092259,
+   "pct": 32.4,
+   "ratio": 0.09168,
    "obs": 745,
    "fiable": true
   },
   "M8/M3": {
    "pct": 34.4,
-   "ratio": 0.101803,
+   "ratio": 0.101219,
    "obs": 681,
    "fiable": true
   },
   "M5/M4": {
-   "pct": 35.0,
-   "ratio": 0.022994,
+   "pct": 32.3,
+   "ratio": 0.024041,
    "obs": 763,
    "fiable": true
   },
   "M6/M4": {
-   "pct": 41.9,
-   "ratio": 0.034747,
+   "pct": 41.2,
+   "ratio": 0.035806,
    "obs": 755,
    "fiable": true
   },
   "M7/M4": {
-   "pct": 36.8,
-   "ratio": 0.052632,
+   "pct": 36.6,
+   "ratio": 0.053708,
    "obs": 745,
    "fiable": true
   },
   "M8/M4": {
-   "pct": 41.0,
-   "ratio": 0.061829,
+   "pct": 40.3,
+   "ratio": 0.062916,
    "obs": 681,
    "fiable": true
   },
