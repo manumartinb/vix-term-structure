@@ -82,6 +82,16 @@ def ratios(serie):
     return pd.DataFrame(out, index=serie.index)
 
 
+def base_cm30(m1, m2, dte1, dte2, spot):
+    """Base a vencimiento CONSTANTE de 30 dias: futuro a 30d / VIX spot - 1.
+
+    El futuro a 30 dias interpola M1 y M2 con w=(DTE2-30)/(DTE2-DTE1) acotado a
+    [0,1]. UNA sola regla para la web (serie historica) y el vivo (valor de ahora):
+    repetirla en dos sitios es el bug 2 otra vez. Vale con escalares o con Series."""
+    w = np.clip((dte2 - 30.0) / (dte2 - dte1), 0.0, 1.0)
+    return (w * m1 + (1.0 - w) * m2) / spot - 1.0
+
+
 def _cap(t):
     """El tramo al que pertenece un DTE. Todo lo que pasa de CAP_DTE cae junto."""
     return int(min(t, CAP_DTE))

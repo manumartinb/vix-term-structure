@@ -33,6 +33,7 @@ USO
   python vivo.py --dry-run       # igual pero sin escribir nada
   python vivo.py --push          # ademas publica en GitHub Pages
   python vivo.py --enviar        # ademas avisa por Telegram SI hay extremo
+  python vivo.py --enviar-siempre  # avisa por Telegram haya extremo o no (tarea de las 17:00)
 
 Reglas tecnicas del proyecto: ASCII, cp1252.
 """
@@ -61,6 +62,7 @@ REINTENTOS = 3
 PAUSA_REINTENTO = 0.8
 UMBRAL_ALTO = 95.0     # los mismos que el radar nocturno
 UMBRAL_BAJO = 5.0
+TICKER_SPOT = "VIX"    # indice al contado en TradingView (CBOE:VIX)
 
 
 def contratos_vivos(hoy=None):
@@ -129,7 +131,8 @@ def construir(verbose=True):
     vivos = contratos_vivos()
     if verbose:
         print("Pidiendo %d contratos (secuencial, ventana unica)..." % len(vivos))
-    precios, t_ini, t_fin = pedir_precios([tk for _, tk, _ in vivos], verbose)
+    # el VIX al contado va en la MISMA ventana que los 8 futuros (secuencial)
+    precios, t_ini, t_fin = pedir_precios([tk for _, tk, _ in vivos] + [TICKER_SPOT], verbose)
     medio = t_ini + (t_fin - t_ini) / 2
 
     patas, curva = [], {}
@@ -178,7 +181,11 @@ def construir(verbose=True):
                       "obs": int(n),
                       "fiable": bool(fiable.get("M%d" % i) and fiable.get("M%d" % j))}
 
+    base = construir_base(serie, f_cierre, r_hist.index, dte_hist, patas, vivos,
+                          precios[TICKER_SPOT], medio, dte_hoy)
+
     return {
+        "base": base,
         "momento": t_ini.strftime("%Y-%m-%d %H:%M:%S"),
         "ventana_s": round((t_fin - t_ini).total_seconds(), 2),
         "todas_a_la_vez": True,
@@ -190,6 +197,46 @@ def construir(verbose=True):
         "patas": patas,
         "pares": pares,
     }
+
+
+def construir_base(serie, f_cierre, idx_hist, dte_hist, patas, vivos, spot_tv, medio, dte_hoy):
+    """BASE_CM30 de AHORA (futuro a 30d / VIX spot - 1) y su percentil.
+
+    Misma regla que la web: pcv.base_cm30 + percentil condicional por DTE del M1,
+    invertido. La vara es la serie historica CERRADA (spot = cierre oficial del
+    Cboe, cache de la web); el dia de hoy no entra. Solo es 'fiable' (puede
+    disparar extremo) si el spot y las patas M1 y M2 estan EN VIVO."""
+    px_spot, vela = spot_tv
+    edad = None if vela is None else (medio - vela).total_seconds() / 60.0
+    spot_vivo = px_spot is not None and edad is not None and edad <= MAX_EDAD_MIN
+
+    ruta = os.path.join(SITIO, "data", "vix_spot_cboe.csv")
+    spot_h = pd.read_csv(ruta, parse_dates=["Fecha"]).set_index("Fecha")["VIX"]
+    spot_h = spot_h.reindex(idx_hist)          # sin relleno: un dia sin cierre queda sin base
+    det = pd.read_csv(pcv.DETALLE, parse_dates=["Fecha", "VENC_M1", "VENC_M2"])
+    det = det.set_index("Fecha").reindex(idx_hist)
+    d1 = (det["VENC_M1"] - det.index).dt.days
+    d2 = (det["VENC_M2"] - det.index).dt.days
+    hist = pcv.base_cm30(serie["M1"].reindex(idx_hist), serie["M2"].reindex(idx_hist),
+                         d1, d2, spot_h)
+    listas = pcv.vara(hist.values, dte_hist)
+
+    m = dict((p["hueco"], p) for p in patas)
+    m1, m2 = m["M1"]["precio"], m["M2"]["precio"]
+    out = {"spot": px_spot if spot_vivo else None, "spot_edad_min": None if edad is None else round(edad, 1),
+           "spot_vivo": bool(spot_vivo), "valor": None, "pct": None, "obs": 0, "fiable": False}
+    if not spot_vivo:
+        # sin spot en vivo no hay base de ahora (no se mezcla con el cierre de ayer)
+        return out
+    if m1 is None or m2 is None:
+        return out
+    dte2 = float((pd.Timestamp(vivos[1][2]) - pd.Timestamp(dt.date.today())).days)
+    val = float(pcv.base_cm30(m1, m2, dte_hoy, dte2, px_spot))
+    pct, n = pcv.consultar(listas, val, dte_hoy)
+    out.update({"valor": round(val, 6), "pct": None if pct is None else round(pct, 1),
+                "obs": int(n),
+                "fiable": bool(m["M1"]["origen"] == "vivo" and m["M2"]["origen"] == "vivo")})
+    return out
 
 
 def pintar(v):
@@ -216,7 +263,20 @@ def pintar(v):
     if flojos:
         L.append("")
         L.append("%d parejas con alguna pata no viva (no disparan alerta)." % len(flojos))
+    L.append("")
+    L.append(linea_base(v["base"]))
     return "\n".join(L)
+
+
+def linea_base(b):
+    """Una linea con la base futuro-30d / VIX spot, para consola y Telegram."""
+    if b["valor"] is None:
+        return ("Base (futuro 30d vs VIX spot): sin dato de ahora "
+                "(spot en vivo: %s)." % ("si" if b["spot_vivo"] else "NO"))
+    pct = "sin percentil (tramo con pocas observaciones)" if b["pct"] is None \
+        else "percentil %d" % round(b["pct"])
+    return ("Base (futuro 30d vs VIX spot %.2f): %+.2f%%  -> %s%s"
+            % (b["spot"], 100.0 * b["valor"], pct, "" if b["fiable"] else "  *no fiable"))
 
 
 def extremos(v):
@@ -229,6 +289,12 @@ def extremos(v):
             alt.append((c, d["pct"]))
         elif d["pct"] <= UMBRAL_BAJO:
             baj.append((c, d["pct"]))
+    b = v["base"]
+    if b["fiable"] and b["pct"] is not None:
+        if b["pct"] >= UMBRAL_ALTO:
+            alt.append(("BASE_CM30", b["pct"]))
+        elif b["pct"] <= UMBRAL_BAJO:
+            baj.append(("BASE_CM30", b["pct"]))
     return sorted(alt, key=lambda x: -x[1]), sorted(baj, key=lambda x: x[1])
 
 
@@ -274,9 +340,9 @@ def main():
     if "--push" in args:
         publicar(v)
 
-    if "--enviar" in args:
+    if "--enviar" in args or "--enviar-siempre" in args:
         alt, baj = extremos(v)
-        if not alt and not baj:
+        if not alt and not baj and "--enviar-siempre" not in args:
             print("Sin extremos fiables: no se envia nada.")
             return
         lin = ["<b>CURVA VIX - EN VIVO</b>  %s" % v["momento"], ""]
@@ -284,9 +350,12 @@ def main():
             lin.append("EXTREMO ALTO  %s en %d" % (c, round(p)))
         for c, p in baj:
             lin.append("EXTREMO BAJO  %s en %d" % (c, round(p)))
+        if not alt and not baj:
+            lin.append("Sin extremos fiables (>=%d o <=%d)." % (UMBRAL_ALTO, UMBRAL_BAJO))
         lin += ["", "<pre>" + pcv.pintar(pd.Series(
             dict((c, d["pct"]) for c, d in v["pares"].items()
                  if d["pct"] is not None))) + "</pre>"]
+        lin += ["", linea_base(v["base"]) + "  (100 = backwardation, 0 = contango)"]
         lin.append("Provisional: %d/%d patas en vivo, ventana %.1f s. "
                    "El dato firme (liquidacion oficial) entra manana a primera hora."
                    % (v["patas_en_vivo"], v["patas_total"], v["ventana_s"]))

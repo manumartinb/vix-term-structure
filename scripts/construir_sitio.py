@@ -257,9 +257,8 @@ def series_base(serie, detalle):
     dte2 = (pd.to_datetime(detalle["VENC_M2"]) - detalle["Fecha"]).dt.days
     dte2.index = pd.DatetimeIndex(detalle["Fecha"])
     dte2 = dte2.reindex(serie.index)
-    w = ((dte2 - 30) / (dte2 - dte)).clip(0, 1)
     out = pd.DataFrame(index=serie.index)
-    out["BASE_CM30"] = (w * serie["M1"] + (1 - w) * serie["M2"]) / spot - 1.0
+    out["BASE_CM30"] = pcv.base_cm30(serie["M1"], serie["M2"], dte, dte2, spot)
     return out
 
 
