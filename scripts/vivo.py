@@ -63,6 +63,7 @@ PAUSA_REINTENTO = 0.8
 UMBRAL_ALTO = 95.0     # los mismos que el radar nocturno
 UMBRAL_BAJO = 5.0
 TICKER_SPOT = "VIX"    # indice al contado en TradingView (CBOE:VIX)
+URL_WEB = "https://manumartinb.github.io/vix-term-structure/"
 
 
 def contratos_vivos(hoy=None):
@@ -275,7 +276,7 @@ def linea_base(b):
                 "(spot en vivo: %s)." % ("si" if b["spot_vivo"] else "NO"))
     pct = "sin percentil (tramo con pocas observaciones)" if b["pct"] is None \
         else "percentil %d" % round(b["pct"])
-    return ("Base (futuro 30d vs VIX spot %.2f): %+.2f%%  -> %s%s"
+    return ("Base (futuro 30d vs VIX spot %.2f): %+.2f%%, %s%s"
             % (b["spot"], 100.0 * b["valor"], pct, "" if b["fiable"] else "  *no fiable"))
 
 
@@ -296,6 +297,42 @@ def extremos(v):
         elif b["pct"] <= UMBRAL_BAJO:
             baj.append(("BASE_CM30", b["pct"]))
     return sorted(alt, key=lambda x: -x[1]), sorted(baj, key=lambda x: x[1])
+
+
+def mensaje_telegram(v, alt, baj):
+    """El mensaje de las 17:00, corto: titular, triangulo, base y enlace.
+
+    OJO: va en parse_mode HTML. NADA de '<' ni '>' sueltos en el texto (un '<=' lo
+    toma por etiqueta y Telegram devuelve 400: paso el 5-oct 17:00)."""
+    hora = v["momento"][11:16]
+    if v["patas_en_vivo"] == 0:
+        # festivo USA o mercado cerrado: mejor decirlo que mandar la curva de ayer
+        return "<b>CURVA VIX %s</b>: sin datos en vivo (mercado cerrado o festivo)." % hora
+    if alt or baj:
+        tit = ", ".join(["%s ALTO %d" % (c, round(p)) for c, p in alt] +
+                        ["%s BAJO %d" % (c, round(p)) for c, p in baj])
+        tit = "EXTREMO: " + tit
+    else:
+        tit = "sin extremos"
+    lin = ["<b>CURVA VIX %s</b> | %s (%d/%d patas en vivo)"
+           % (hora, tit, v["patas_en_vivo"], v["patas_total"]),
+           "<pre>" + pcv.pintar(pd.Series(
+               dict((c, d["pct"]) for c, d in v["pares"].items()
+                    if d["pct"] is not None))) + "</pre>"]
+    b = v["base"]
+    if b["valor"] is None:
+        lin.append("Base: sin VIX spot en vivo")
+    else:
+        lin.append("Base 30d vs spot %.2f: %+.1f%%, percentil %s%s"
+                   % (b["spot"], 100.0 * b["valor"],
+                      "-" if b["pct"] is None else "%d" % round(b["pct"]),
+                      "" if b["fiable"] else " (no fiable)"))
+    muertas = [p["hueco"] for p in v["patas"] if p["origen"] != "vivo"]
+    if muertas:
+        lin.append("Sin dato vivo: %s (no cuentan para alertas)" % ", ".join(muertas))
+    lin.append("100 = backwardation, 0 = contango. Provisional.")
+    lin.append('<a href="%s">Abrir panel</a>' % URL_WEB)
+    return "\n".join(lin)
 
 
 def escribir_json(v):
@@ -345,22 +382,13 @@ def main():
         if not alt and not baj and "--enviar-siempre" not in args:
             print("Sin extremos fiables: no se envia nada.")
             return
-        lin = ["<b>CURVA VIX - EN VIVO</b>  %s" % v["momento"], ""]
-        for c, p in alt:
-            lin.append("EXTREMO ALTO  %s en %d" % (c, round(p)))
-        for c, p in baj:
-            lin.append("EXTREMO BAJO  %s en %d" % (c, round(p)))
-        if not alt and not baj:
-            lin.append("Sin extremos fiables (>=%d o <=%d)." % (UMBRAL_ALTO, UMBRAL_BAJO))
-        lin += ["", "<pre>" + pcv.pintar(pd.Series(
-            dict((c, d["pct"]) for c, d in v["pares"].items()
-                 if d["pct"] is not None))) + "</pre>"]
-        lin += ["", linea_base(v["base"]) + "  (100 = backwardation, 0 = contango)"]
-        lin.append("Provisional: %d/%d patas en vivo, ventana %.1f s. "
-                   "El dato firme (liquidacion oficial) entra manana a primera hora."
-                   % (v["patas_en_vivo"], v["patas_total"], v["ventana_s"]))
-        estado.avisar("\n".join(lin))
-        print("Aviso enviado (%d altos, %d bajos)." % (len(alt), len(baj)))
+        if estado.avisar(mensaje_telegram(v, alt, baj)):
+            print("Aviso enviado (%d altos, %d bajos)." % (len(alt), len(baj)))
+        else:
+            # antes imprimia "enviado" y salia con 0 aunque Telegram dijera 400
+            # (5-oct 17:00): el fallo quedaba invisible para el Programador de tareas.
+            print("FALLO: el aviso NO se envio.")
+            sys.exit(1)
 
 
 if __name__ == "__main__":
