@@ -37,6 +37,8 @@ USO
 
 SEMAFOROS (desde 2026-10-08): vivo.json lleva 'semaforos' (estado del ultimo cierre oficial +
 lectura provisional del instante) y el Telegram de las 17:00 una linea por semaforo.
+  python vivo.py --push --avisos-vivo   # (tarea Vivo, cada 15 min) cuenta lecturas seguidas en verde
+                 y manda el AVISO EN VIVO como mucho una vez al dia por semaforo
 
 Reglas tecnicas del proyecto: ASCII, cp1252.
 """
@@ -385,6 +387,91 @@ def mensaje_telegram(v, alt, baj):
     return "\n".join(lin)
 
 
+ESTADO_VIVO = os.path.join(HERE, "data", "semaforos_vivo_estado.json")
+
+
+def leer_estado_vivo(hoy, path=None):
+    """Estado del dia de los avisos en vivo. Cambia de fecha -> se empieza de cero."""
+    path = path or ESTADO_VIVO
+    try:
+        with io.open(path, encoding="utf-8") as fh:
+            e = json.load(fh)
+    except Exception:
+        e = {}
+    if e.get("fecha") != hoy:
+        e = {"fecha": hoy, "sem": {}}
+    e.setdefault("sem", {})
+    return e
+
+
+def guardar_estado_vivo(e, path=None):
+    path = path or ESTADO_VIVO
+    tmp = path + ".tmp"
+    with io.open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(e, fh, indent=1)
+    os.replace(tmp, path)
+
+
+def contar_lecturas(v, e):
+    """Cuenta lecturas SEGUIDAS en verde (solo las fiables: patas del momento) y anota en
+    v["semaforos"] si el verde en vivo esta confirmado. Una lectura no fiable ni suma ni corta."""
+    defs = dict((s["id"], s) for s in semaforos.SEMAFOROS)
+    hora = v["momento"][11:16]
+    for s in v.get("semaforos", []):
+        d = defs.get(s["id"], {})
+        st = e["sem"].setdefault(s["id"], {"lecturas_si": 0, "avisado": False, "historial": []})
+        if s.get("fiable") and s.get("valor") is not None:
+            st["lecturas_si"] = st["lecturas_si"] + 1 if s.get("estado") == "SI" else 0
+            st["historial"] = (st.get("historial", []) + [[hora, s.get("valor"), s.get("estado")]])[-40:]
+        n_conf = int(d.get("confirmaciones", 2))
+        s["lecturas_si"] = st["lecturas_si"]
+        s["confirmaciones"] = n_conf
+        s["confirmado"] = bool(st["lecturas_si"] >= n_conf and s.get("fiable") and s.get("estado") == "SI")
+        s["aviso_vivo"] = d.get("aviso_vivo")
+        s["avisado_hoy"] = bool(st.get("avisado"))
+    return e
+
+
+def mensaje_aviso_vivo(s, d, hora, prueba=False):
+    """Telegram del verde en vivo. Sin '<' ni '>' sueltos (parse_mode HTML)."""
+    fmt = s.get("formato") or "num"
+    L = []
+    if prueba:
+        L.append("<b>PRUEBA del aviso en vivo (no es senal)</b>")
+    if d.get("aviso_vivo") == "entrada":
+        L.append("\U0001F7E2 <b>ENTRADA EN VIVO: %s</b>" % s.get("nombre"))
+    else:
+        L.append("\U0001F7E1 <b>AVISO PREVIO: %s</b>" % s.get("nombre"))
+    L.append("En vivo %s = %s a las %s (confirmado en %d lecturas seguidas)."
+             % (s.get("variable"), semaforos.txt_valor(fmt, s.get("valor")), hora, s.get("lecturas_si", 0)))
+    L.append(d.get("accion_si") if d.get("aviso_vivo") == "entrada" else d.get("aviso_previo_txt", ""))
+    L.append('<a href="%s">Abrir panel</a>' % URL_WEB)
+    return "\n".join(x for x in L if x)
+
+
+def avisos_vivo(v, e, enviar=None):
+    """Como mucho UN aviso al dia por semaforo: verde en vivo confirmado, lectura actual fiable y
+    semaforo oficial todavia en NO (si ya esta verde con el cierre, lo cubre el aviso de las 15:15).
+    Si Telegram falla no se marca como enviado: se reintenta en la lectura siguiente."""
+    enviar = enviar or estado.avisar
+    defs = dict((s["id"], s) for s in semaforos.SEMAFOROS)
+    hora = v["momento"][11:16]
+    for s in v.get("semaforos", []):
+        d = defs.get(s["id"])
+        st = e["sem"].get(s["id"])
+        if not d or not st or not d.get("aviso_vivo"):
+            continue
+        if st.get("avisado") or not s.get("confirmado") or s.get("oficial_estado") == "SI":
+            continue
+        if enviar(mensaje_aviso_vivo(s, d, hora)):
+            st["avisado"] = True
+            st["hora_aviso"] = hora
+            print("AVISO EN VIVO enviado: %s (%s)" % (s.get("nombre"), hora))
+        else:
+            print("FALLO del aviso en vivo de %s: se reintenta en la lectura siguiente." % s.get("nombre"))
+    return e
+
+
 def escribir_json(v):
     os.makedirs(SITIO, exist_ok=True)
     tmp = VIVO_JSON + ".tmp"
@@ -419,6 +506,16 @@ def main():
     print(pintar(v))
     print("")
 
+    avisos = "--avisos-vivo" in args
+    e = None
+    if avisos:
+        e = leer_estado_vivo(v["momento"][:10])
+        contar_lecturas(v, e)
+        for s in v.get("semaforos", []):
+            print("VIVO %s: %s, %d lectura(s) seguidas en verde de %d, confirmado %s, avisado hoy %s"
+                  % (s.get("nombre"), s.get("estado"), s.get("lecturas_si", 0), s.get("confirmaciones", 0),
+                     "SI" if s.get("confirmado") else "no", "SI" if s.get("avisado_hoy") else "no"))
+
     if "--dry-run" in args:
         print("--dry-run: no se escribe nada.")
         return
@@ -426,6 +523,10 @@ def main():
     print("Escrito: %s" % escribir_json(v))
     if "--push" in args:
         publicar(v)
+    if avisos:
+        if v["patas_en_vivo"] > 0:
+            avisos_vivo(v, e)
+        guardar_estado_vivo(e)
 
     if "--enviar" in args or "--enviar-siempre" in args:
         alt, baj = extremos(v)

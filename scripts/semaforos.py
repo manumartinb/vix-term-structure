@@ -20,6 +20,12 @@ CONTRATO DE CADA ENTRADA
   formato   "pct" (se ensena x100 con %) o "num"
   regla_txt, accion_si, accion_no, salida, evidencia: textos de la tarjeta (ASCII, sin '<' ni '>',
             porque viajan tambien por Telegram en parse_mode HTML)
+  aviso_vivo     None (sin aviso en vivo) | "previo" (aviso de que se esta encendiendo; la entrada
+                 sigue siendo con el cierre) | "entrada" (operar en el momento: solo si esta PROBADO)
+  confirmaciones lecturas en vivo SEGUIDAS en verde (cada 15 min, patas del momento) para avisar
+  aviso_previo_txt  texto del aviso previo (que pasara si cierra asi)
+El aviso en vivo sale como mucho UNA vez al dia por semaforo (vivo.py --avisos-vivo, estado en
+data/semaforos_vivo_estado.json) y no sale si el semaforo ya esta en verde con el cierre oficial.
 
 TIEMPOS (importante para operar)
 El estado oficial es el del ULTIMO CIERRE OFICIAL del CBOE, que la corrida de las 08:00 publica.
@@ -49,6 +55,11 @@ SEMAFOROS = [
         "accion_no": "Sin entrada.",
         "salida": ("Vender cuando pase la mitad de los dias que le quedaban a la put al comprarla "
                    "(si quedaban 330, a los 165)."),
+        "aviso_vivo": "previo",
+        "confirmaciones": 2,
+        "aviso_previo_txt": ("Si cierra asi, la entrada es en la sesion siguiente (16:30 en Espana): te la "
+                             "confirmo a las 15:15. Hoy no compres: comprar el mismo dia no mejora "
+                             "(medido: -0,7 pp el primer dia del episodio)."),
         "evidencia": ("Backtest a precio medio: +17 % por operacion en 2019-2025 y +18 % fuera de "
                       "muestra en 2017-2018. Veredicto GO CONDICIONAL: riesgo de episodios como "
                       "enero de 2020 (primer backwardation de una crisis que luego se agrava)."),

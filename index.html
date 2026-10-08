@@ -109,6 +109,9 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
 .sem-det p { margin:5px 0; color:var(--muted); font-size:12px; }
 .sem-det b { color:var(--text); }
 .sem-vacio { color:var(--muted); font-size:12px; padding:8px; }
+.sem.vivo { border-left-color:#3fb950; border-left-style:dashed; }
+.sem.vivo .sem-luz { background:transparent; border:2px solid #3fb950; box-shadow:0 0 6px #3fb950; }
+.sem.vivo .sem-estado { background:rgba(63,185,80,0.10); color:#7ee787; border:1px dashed #3fb950; }
 </style>
 </head>
 <body>
@@ -294,7 +297,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   ese dia. <b>Reescalado de 2007</b>: hasta el
   23-mar-2007 los futuros del VIX cotizaban a diez veces el indice; esta serie arranca despues
   del cambio para no mezclar escalas.</p>
-  <p>Generado el 2026-10-08 09:13 &middot; datos de mercado publicos, sin garantia de exactitud y
+  <p>Generado el 2026-10-08 10:33 &middot; datos de mercado publicos, sin garantia de exactitud y
   sin fin comercial &middot; esto no es asesoramiento de inversion.</p>
 </div>
 
@@ -424,8 +427,21 @@ function aplicaVivoSem(){
             ' -- con este dato el cierre daria ' + etq + (x.fiable ? '' : ' (alguna pata sin precio del momento)') + '.';
     var cambia = x.estado !== (x.oficial_estado || '');
     if (cambia && x.oficial_estado) t += ' Distinto del ultimo cierre oficial.';
+    if (x.lecturas_si) t += ' Lleva ' + x.lecturas_si + (x.lecturas_si === 1 ? ' lectura' : ' lecturas') +
+                           ' seguidas en verde' + (x.confirmado ? ' (confirmado).' : '.');
     el.textContent = t;
     el.className = 'sem-vivo' + (cambia ? ' cambia' : '');
+    /* verde EN VIVO confirmado y oficial aun en NO: la tarjeta lo dice sin hacerse pasar por el oficial */
+    var card = document.getElementById('sem-' + x.id);
+    if (card) {
+      var verdeVivo = !v.rancio && x.confirmado && x.oficial_estado === 'NO';
+      card.classList.toggle('vivo', verdeVivo);
+      var b = card.querySelector('.sem-estado');
+      if (b) {
+        if (!b.getAttribute('data-base')) b.setAttribute('data-base', b.textContent);
+        b.textContent = verdeVivo ? 'VERDE EN VIVO (provisional)' : b.getAttribute('data-base');
+      }
+    }
   });
 }
 
