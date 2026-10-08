@@ -459,6 +459,7 @@ def avisos_vivo(v, e, enviar=None):
     enviar = enviar or estado.avisar
     defs = dict((s["id"], s) for s in semaforos.SEMAFOROS)
     hora = v["momento"][11:16]
+    pend = []
     for s in v.get("semaforos", []):
         d = defs.get(s["id"])
         st = e["sem"].get(s["id"])
@@ -466,12 +467,25 @@ def avisos_vivo(v, e, enviar=None):
             continue
         if st.get("avisado") or not s.get("confirmado") or s.get("oficial_estado") == "SI":
             continue
-        if enviar(mensaje_aviso_vivo(s, d, hora)):
+        pend.append((s, d, st))
+    if not pend:
+        return e
+    # UN solo Telegram por lectura aunque se confirmen varios semaforos a la vez (LONG PUT + SHORT CALL)
+    msgs = [mensaje_aviso_vivo(s, d, hora) for (s, d, st) in pend]
+    if len(msgs) > 1:
+        cab = ("<b>AVISO EN VIVO DOBLE: %s</b>\nOjo: misma apuesta (UVXY a la baja); operar las dos suma riesgo."
+               % semaforos.esc(" + ".join(s.get("nombre") for (s, d, st) in pend)))
+        txt = cab + "\n\n" + "\n\n".join(m.rsplit("\n", 1)[0] for m in msgs[:-1]) + "\n\n" + msgs[-1]
+    else:
+        txt = msgs[0]
+    nombres = ", ".join(s.get("nombre") for (s, d, st) in pend)
+    if enviar(txt):
+        for (s, d, st) in pend:
             st["avisado"] = True
             st["hora_aviso"] = hora
-            print("AVISO EN VIVO enviado: %s (%s)" % (s.get("nombre"), hora))
-        else:
-            print("FALLO del aviso en vivo de %s: se reintenta en la lectura siguiente." % s.get("nombre"))
+        print("AVISO EN VIVO enviado: %s (%s)" % (nombres, hora))
+    else:
+        print("FALLO del aviso en vivo de %s: se reintenta en la lectura siguiente." % nombres)
     return e
 
 

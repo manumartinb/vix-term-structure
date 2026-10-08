@@ -66,6 +66,10 @@ def mensaje(verdes, sin_dato, todos, atrasado, esperado, prueba=False):
     L = []
     if prueba:
         L.append("<b>PRUEBA del aviso de semaforos (no es senal)</b>")
+    if len(verdes) >= 2:
+        L.append("<b>LUZ VERDE DOBLE: %s</b>" % esc(" + ".join(s["nombre"] for s in verdes)))
+        L.append("Ojo: es la misma apuesta (UVXY a la baja); en los dias de senal se mueven casi a la par. Operar las dos suma riesgo.")
+        L.append("")
     for s in verdes:
         fmt = s["formato"]
         L.append("\U0001F7E2 <b>LUZ VERDE: %s</b>" % esc(s["nombre"]))

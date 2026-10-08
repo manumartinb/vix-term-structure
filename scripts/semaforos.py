@@ -75,6 +75,32 @@ SEMAFOROS = [
                       "muestra en 2017-2018. Veredicto GO CONDICIONAL: riesgo de episodios como "
                       "enero de 2020 (primer backwardation de una crisis que luego se agrava)."),
     },
+    {
+        "id": "short_call_uvxy",
+        "nombre": "SHORT CALL UVXY",
+        "variable": "M2/M1 - 1",
+        "patas": ("M1", "M2"),
+        "valor": lambda c: c["M2"] / c["M1"] - 1.0,
+        "regla": lambda x: x < 0.0,
+        "formato": "pct",
+        "regla_txt": ("Misma senal que la LONG PUT: verde si en el cierre oficial M2 queda por debajo de M1 (backwardation). "
+                      "La senal original del Excel (percentil de jugosidad < 15) rinde lo mismo y entra menos dias."),
+        "accion_si": ("Vender call spread de UVXY: vender la call con mas de 220 dias a vencimiento (deltas 0,1 a 0,6) y "
+                      "comprar, del mismo vencimiento, la call del primer strike igual o mayor que el doble del vendido "
+                      "(techo). Si esa call no cotiza, esa linea no se opera. Precio medio, a las 10:30 de Nueva York "
+                      "({hora_es} en Espana) de la sesion siguiente al cierre, o en el momento si la curva se invierte en "
+                      "vivo (vender el mismo dia no empeora). NUNCA la call desnuda: en mar-2020 la cartera perdio mas del "
+                      "doble de su capital."),
+        "accion_no": "Sin entrada.",
+        "salida": ("Recomprar el spread cuando pase el 90 % de los dias que le quedaban al vender (si quedaban 380, a los "
+                   "342). Sin stops: cerrar en el pico del miedo es lo peor que se puede hacer con esta venta."),
+        "aviso_vivo": "entrada",
+        "confirmaciones": 2,
+        "aviso_previo_txt": "",
+        "evidencia": ("Backtest a precio medio (spread 2x, salida a 0,9 de la vida): +8,7 % por operacion sobre la perdida "
+                      "maxima en 2019-2026 y +9,9 % fuera de muestra en 2017-2018; @APR GO. Es la misma apuesta que la "
+                      "LONG PUT (UVXY a la baja): en los dias de senal las dos se mueven casi a la par."),
+    },
 ]
 
 HIST_SESIONES = 260      # cuanto historial viaja a la web para la mini grafica
@@ -191,6 +217,17 @@ def evaluar(sem, serie):
 
 def evaluar_todos(serie):
     return [evaluar(s, serie) for s in SEMAFOROS]
+
+
+def historias(serie):
+    """Historia COMPLETA de cada semaforo (para la seccion 'Historia de las senales' de la web)."""
+    out = []
+    for s in SEMAFOROS:
+        v = _serie_valor(s, serie)
+        out.append({"id": s["id"], "nombre": s["nombre"], "variable": s["variable"], "formato": s["formato"],
+                    "f": [d.strftime("%Y-%m-%d") for d in v.index], "v": [round(float(x), 5) for x in v.values],
+                    "on": [1 if s["regla"](x) else 0 for x in v.values]})
+    return out
 
 
 def evaluar_vivo(sem, curva, fiable):

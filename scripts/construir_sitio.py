@@ -449,6 +449,14 @@ def main():
         "envolvente": env,
         "heat": mapa_calor(pct),
     }
+    # historia completa de los semaforos para la seccion 'Historia de las senales' (se carga al abrirla)
+    try:
+        _ej = os.path.join(SITIO, "estr.json")
+        with io.open(_ej + ".tmp", "w", encoding="utf-8", newline="") as fh:
+            json.dump(semaforos.historias(serie), fh, separators=(",", ":"))
+        os.replace(_ej + ".tmp", _ej)
+    except Exception as e:
+        DEGRADACIONES.append("Historia de los semaforos sin calcular (%s)." % str(e)[:120])
     _dj = os.path.join(SITIO, "data.json")
     with io.open(_dj + ".tmp", "w", encoding="utf-8", newline="") as fh:
         json.dump(datos, fh, separators=(",", ":"))
@@ -612,6 +620,13 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
 .sem-det p { margin:5px 0; color:var(--muted); font-size:12px; }
 .sem-det b { color:var(--text); }
 .sem-vacio { color:var(--muted); font-size:12px; padding:8px; }
+.sem-doble { grid-column:1 / -1; border:1px solid #3fb950; background:#0f1a12; color:#7ee787; border-radius:6px;
+             padding:8px 12px; font-size:12.5px; }
+.sem-doble b { color:#3fb950; }
+.estr-pane { max-width:var(--maxw); margin:10px auto; background:var(--panel); border:1px solid var(--border);
+             border-radius:6px; padding:10px 12px 4px 12px; }
+.estr-pane h4 { margin:0 0 4px 0; font-size:14px; }
+.estr-plot { width:100%; height:260px; }
 .sem.vivo { border-left-color:#3fb950; border-left-style:dashed; }
 .sem.vivo .sem-luz { background:transparent; border:2px solid #3fb950; box-shadow:0 0 6px #3fb950; }
 .sem.vivo .sem-estado { background:rgba(63,185,80,0.10); color:#7ee787; border:1px dashed #3fb950; }
@@ -706,6 +721,11 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   celdas identicas</strong>, y de 2010 a 2013 <strong>sin una sola diferencia</strong> en ~1.790
   sesiones seguidas.
 </div>
+
+<details class="sec" data-sec="estr">
+  <summary>Historia de las senales de entrada <span class="cnt">semaforos, desde 2007</span></summary>
+  <div class="secbody"><div id="estr-plots"><div class="sem-vacio">Cargando...</div></div></div>
+</details>
 
 <details class="sec" data-sec="envol">
   <summary>La curva de hoy contra su historia <span class="cnt">1 grafico</span></summary>
@@ -858,6 +878,13 @@ function pintaSemaforos(lista){
   if (!cont) return;
   if (!lista.length){ cont.innerHTML = '<div class="sem-vacio">Sin semaforos en data.json</div>'; return; }
   cont.innerHTML = '';
+  var verdes = lista.filter(function(s){ return s.estado === 'SI'; });
+  if (verdes.length >= 2) {
+    var dv = document.createElement('div'); dv.className = 'sem-doble';
+    dv.innerHTML = '<b>DOBLE VERDE</b>: ' + verdes.map(function(s){ return esc(s.nombre); }).join(' + ') +
+      '. Es la misma apuesta (UVXY a la baja): operar las dos suma riesgo en los mismos episodios.';
+    cont.appendChild(dv);
+  }
   lista.forEach(function(s){
     window.SEM_FMT[s.id] = s.formato;
     var cls = s.estado === 'SI' ? 'si' : (s.estado === 'NO' ? 'no' : 'nd');
@@ -1129,6 +1156,29 @@ async function load(){
   };
   alAbrir('conv', () => pintarFamilia('conv'));
   alAbrir('base', () => pintarFamilia('base'));
+  // ---- historia completa de cada semaforo (estr.json, se carga al abrir)
+  alAbrir('estr', () => {
+    fetch('estr.json?v=' + Date.now()).then(r => r.json()).then(lista => {
+      const cont = document.getElementById('estr-plots');
+      cont.innerHTML = '';
+      lista.forEach(s => {
+        const el = document.createElement('div'); el.className = 'estr-pane';
+        el.innerHTML = '<h4>' + esc(s.nombre) + ' <span class="sem-mut">' + esc(s.variable) + ', puntos verdes = dias con senal</span></h4>' +
+                       '<div class="estr-plot" id="estr-' + s.id + '"></div>';
+        cont.appendChild(el);
+        const k = s.formato === 'pct' ? 100 : 1;
+        const y = s.v.map(x => x * k);
+        const xv = s.f.filter((_, i) => s.on[i]); const yv = y.filter((_, i) => s.on[i]);
+        Plotly.newPlot('estr-' + s.id, [
+          { x: s.f, y: y, type: 'scatter', mode: 'lines', line: { color: '#8b949e', width: 1 }, hovertemplate: '%{x}: %{y:.2f}<extra></extra>' },
+          { x: xv, y: yv, type: 'scatter', mode: 'markers', marker: { color: '#3fb950', size: 3 }, hovertemplate: '%{x}: %{y:.2f} (senal)<extra></extra>' }
+        ], { paper_bgcolor: '#161b22', plot_bgcolor: '#161b22', font: { color: '#8b949e', size: 10 }, height: 260, showlegend: false,
+             margin: { l: 40, r: 10, t: 6, b: 28 }, xaxis: { gridcolor: '#21262d' },
+             yaxis: { gridcolor: '#21262d', zeroline: true, zerolinecolor: '#f0b849', ticksuffix: s.formato === 'pct' ? '%' : '' } },
+           { displayModeBar: false, responsive: true });
+      });
+    }).catch(() => { document.getElementById('estr-plots').innerHTML = '<div class="sem-vacio">No se pudo cargar estr.json</div>'; });
+  });
 
   // los 28 paneles: el DOM ya esta puesto; al abrir la seccion se observan y
   // se dibujan solo los que entran en pantalla
