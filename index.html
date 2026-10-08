@@ -309,7 +309,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   ese dia. <b>Reescalado de 2007</b>: hasta el
   23-mar-2007 los futuros del VIX cotizaban a diez veces el indice; esta serie arranca despues
   del cambio para no mezclar escalas.</p>
-  <p>Generado el 2026-10-08 16:27 &middot; datos de mercado publicos, sin garantia de exactitud y
+  <p>Generado el 2026-10-08 18:04 &middot; datos de mercado publicos, sin garantia de exactitud y
   sin fin comercial &middot; esto no es asesoramiento de inversion.</p>
 </div>
 
@@ -370,8 +370,10 @@ function pintaSemaforos(lista){
   var verdes = lista.filter(function(s){ return s.estado === 'SI'; });
   if (verdes.length >= 2) {
     var dv = document.createElement('div'); dv.className = 'sem-doble';
+    var aps = verdes.map(function(s){ return s.apuesta || ''; });
+    var misma = aps[0] && aps.every(function(a){ return a === aps[0]; });
     dv.innerHTML = '<b>DOBLE VERDE</b>: ' + verdes.map(function(s){ return esc(s.nombre); }).join(' + ') +
-      '. Es la misma apuesta (UVXY a la baja): operar las dos suma riesgo en los mismos episodios.';
+      (misma ? '. Es la misma apuesta (' + esc(aps[0]) + '): operar las dos suma riesgo en los mismos episodios.' : '.');
     cont.appendChild(dv);
   }
   lista.forEach(function(s){

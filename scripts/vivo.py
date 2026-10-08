@@ -256,7 +256,7 @@ def construir_semaforos(hist, curva, fiable):
         out = []
         for x in semaforos.evaluar_vivo_todos(curva, fiable):
             o = ofi.get(x["id"], {})
-            x.update({"nombre": o.get("nombre"), "variable": o.get("variable"),
+            x.update({"nombre": o.get("nombre"), "variable": o.get("variable"), "apuesta": o.get("apuesta"),
                       "formato": o.get("formato"), "oficial_estado": o.get("estado"),
                       "oficial_fecha": o.get("fecha_cierre"), "oficial_valor": o.get("valor")})
             out.append(x)
@@ -473,8 +473,10 @@ def avisos_vivo(v, e, enviar=None):
     # UN solo Telegram por lectura aunque se confirmen varios semaforos a la vez (LONG PUT + SHORT CALL)
     msgs = [mensaje_aviso_vivo(s, d, hora) for (s, d, st) in pend]
     if len(msgs) > 1:
-        cab = ("<b>AVISO EN VIVO DOBLE: %s</b>\nOjo: misma apuesta (UVXY a la baja); operar las dos suma riesgo."
-               % semaforos.esc(" + ".join(s.get("nombre") for (s, d, st) in pend)))
+        cab = "<b>AVISO EN VIVO DOBLE: %s</b>" % semaforos.esc(" + ".join(s.get("nombre") for (s, d, st) in pend))
+        ap = set(d.get("apuesta") for (s, d, st) in pend)
+        if len(ap) == 1 and None not in ap:
+            cab += "\nOjo: misma apuesta (%s); operar las dos suma riesgo." % semaforos.esc(ap.pop())
         txt = cab + "\n\n" + "\n\n".join(m.rsplit("\n", 1)[0] for m in msgs[:-1]) + "\n\n" + msgs[-1]
     else:
         txt = msgs[0]

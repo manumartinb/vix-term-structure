@@ -1,7 +1,7 @@
 """
 jugosidad_oficial.py -- MEDIDA UNICA de la "jugosidad" de la curva de futuros del VIX y de su percentil
-as-of. La importan a la vez el backtest de la SHORT CALL (ESTRATEGIAS/UVXY/ANALISIS/SC_APR_STUDY) y la web
-(semaforos.py), para que los dos usen EXACTAMENTE la misma vara. (Plan SHORT CALL, fase F0, 2026-10-08.)
+as-of. La importa el backtest de la SHORT CALL (ESTRATEGIAS/UVXY/ANALISIS/SC_APR_STUDY). La web NO la usa: el
+estudio (F5) mostro que M2/M1 < 0 rinde lo mismo, y el semaforo usa esa regla. (Plan SHORT CALL, F0, 2026-10-08.)
 
 DEFINICIONES (fijadas antes de mirar resultados)
   Fuente: serie OFICIAL de liquidaciones del Cboe, data/vix_futuros_M1_M8_detalle.csv (M1, M2 y los

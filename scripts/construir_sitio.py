@@ -881,8 +881,10 @@ function pintaSemaforos(lista){
   var verdes = lista.filter(function(s){ return s.estado === 'SI'; });
   if (verdes.length >= 2) {
     var dv = document.createElement('div'); dv.className = 'sem-doble';
+    var aps = verdes.map(function(s){ return s.apuesta || ''; });
+    var misma = aps[0] && aps.every(function(a){ return a === aps[0]; });
     dv.innerHTML = '<b>DOBLE VERDE</b>: ' + verdes.map(function(s){ return esc(s.nombre); }).join(' + ') +
-      '. Es la misma apuesta (UVXY a la baja): operar las dos suma riesgo en los mismos episodios.';
+      (misma ? '. Es la misma apuesta (' + esc(aps[0]) + '): operar las dos suma riesgo en los mismos episodios.' : '.');
     cont.appendChild(dv);
   }
   lista.forEach(function(s){

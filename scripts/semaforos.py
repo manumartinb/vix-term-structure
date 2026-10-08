@@ -50,6 +50,7 @@ import pandas as pd
 SEMAFOROS = [
     {
         "id": "long_put_uvxy",
+        "apuesta": "UVXY a la baja",
         "nombre": "LONG PUT UVXY",
         "variable": "M2/M1 - 1",
         "patas": ("M1", "M2"),
@@ -77,6 +78,7 @@ SEMAFOROS = [
     },
     {
         "id": "short_call_uvxy",
+        "apuesta": "UVXY a la baja",
         "nombre": "SHORT CALL UVXY",
         "variable": "M2/M1 - 1",
         "patas": ("M1", "M2"),
@@ -85,21 +87,25 @@ SEMAFOROS = [
         "formato": "pct",
         "regla_txt": ("Misma senal que la LONG PUT: verde si en el cierre oficial M2 queda por debajo de M1 (backwardation). "
                       "La senal original del Excel (percentil de jugosidad < 15) rinde lo mismo y entra menos dias."),
-        "accion_si": ("Vender call spread de UVXY: vender la call con mas de 220 dias a vencimiento (deltas 0,1 a 0,6) y "
+        "accion_si": ("Vender call spread de UVXY: vender la call con mas de 220 dias a vencimiento (deltas 0,3 a 0,6: con "
+                      "0,1-0,2 casi nunca existe la pata de techo) y "
                       "comprar, del mismo vencimiento, la call del primer strike igual o mayor que el doble del vendido "
                       "(techo). Si esa call no cotiza, esa linea no se opera. Precio medio, a las 10:30 de Nueva York "
-                      "({hora_es} en Espana) de la sesion siguiente al cierre, o en el momento si la curva se invierte en "
-                      "vivo (vender el mismo dia no empeora). NUNCA la call desnuda: en mar-2020 la cartera perdio mas del "
-                      "doble de su capital."),
+                      "({hora_es} en Espana) de la sesion siguiente al cierre, como ORDEN DE SPREAD (las dos patas a la vez, "
+                      "cerca del precio medio): pagando la horquilla pata a pata la ventaja casi desaparece. NUNCA la call "
+                      "desnuda: en mar-2020 la cartera perdio mas del doble de su capital."),
         "accion_no": "Sin entrada.",
         "salida": ("Recomprar el spread cuando pase el 90 % de los dias que le quedaban al vender (si quedaban 380, a los "
                    "342). Sin stops: cerrar en el pico del miedo es lo peor que se puede hacer con esta venta."),
-        "aviso_vivo": "entrada",
+        "aviso_vivo": "previo",
         "confirmaciones": 2,
-        "aviso_previo_txt": "",
-        "evidencia": ("Backtest a precio medio (spread 2x, salida a 0,9 de la vida): +8,7 % por operacion sobre la perdida "
-                      "maxima en 2019-2026 y +9,9 % fuera de muestra en 2017-2018; @APR GO. Es la misma apuesta que la "
-                      "LONG PUT (UVXY a la baja): en los dias de senal las dos se mueven casi a la par."),
+        "aviso_previo_txt": ("Si cierra asi, la entrada (vender el call spread 2x) es en la sesion siguiente, a las 10:30 de "
+                             "Nueva York ({hora_es} en Espana): te la confirmo a las 15:15. Hoy no vendas: vender el mismo dia "
+                             "no se ha demostrado mejor el primer dia del episodio."),
+        "evidencia": ("Backtest a precio medio (spread 2x, senal M2/M1<0, salida a 0,9 de la vida): +8,5 % por operacion "
+                      "sobre la perdida maxima en 2019-2026 y +9,6 % fuera de muestra en 2017-2018. Pagando la horquilla "
+                      "pata a pata: +1,6 % (no se distingue de cero) y +4,9 %. GO CONDICIONAL: solo con orden de spread "
+                      "cerca del precio medio. Misma apuesta que la LONG PUT (UVXY a la baja)."),
     },
 ]
 
@@ -169,7 +175,8 @@ def _serie_valor(sem, serie):
 
 def evaluar(sem, serie):
     """Estado OFICIAL de un semaforo sobre la serie diaria de cierres (DataFrame M1..M8)."""
-    base = {"id": sem["id"], "nombre": sem["nombre"], "variable": sem["variable"], "formato": sem["formato"]}
+    base = {"id": sem["id"], "nombre": sem["nombre"], "variable": sem["variable"], "formato": sem["formato"],
+            "apuesta": sem.get("apuesta")}
     if serie is None or len(serie) == 0:
         base.update({"estado": "SIN DATO", "motivo": "No hay serie de cierres oficiales.", "valor": None})
         base.update(textos(sem, pd.Timestamp(dt.date.today())))
