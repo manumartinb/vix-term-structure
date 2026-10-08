@@ -70,7 +70,7 @@ SEMAFOROS = [
         "aviso_vivo": "previo",
         "confirmaciones": 2,
         "aviso_previo_txt": ("Si cierra asi, la entrada es en la sesion siguiente, a las 10:30 de Nueva York "
-                             "({hora_es} en Espana): te la confirmo a las 15:15. Hoy no compres: comprar el "
+                             "({hora_es} en Espana): te la confirmo manana a las 15:15 hora de Espana, antes de la entrada. Hoy no compres: comprar el "
                              "mismo dia no mejora (medido: -0,7 pp el primer dia del episodio)."),
         "evidencia": ("Backtest a precio medio: +17 % por operacion en 2019-2025 y +18 % fuera de "
                       "muestra en 2017-2018. Veredicto GO CONDICIONAL: riesgo de episodios como "
@@ -91,21 +91,19 @@ SEMAFOROS = [
                       "0,1-0,2 casi nunca existe la pata de techo) y "
                       "comprar, del mismo vencimiento, la call del primer strike igual o mayor que el doble del vendido "
                       "(techo). Si esa call no cotiza, esa linea no se opera. Precio medio, a las 10:30 de Nueva York "
-                      "({hora_es} en Espana) de la sesion siguiente al cierre, como ORDEN DE SPREAD (las dos patas a la vez, "
-                      "cerca del precio medio): pagando la horquilla pata a pata la ventaja casi desaparece. NUNCA la call "
-                      "desnuda: en mar-2020 la cartera perdio mas del doble de su capital."),
+                      "({hora_es} en Espana) de la sesion siguiente al cierre. NUNCA la call desnuda: en mar-2020 la "
+                      "cartera perdio mas del doble de su capital."),
         "accion_no": "Sin entrada.",
         "salida": ("Recomprar el spread cuando pase el 90 % de los dias que le quedaban al vender (si quedaban 380, a los "
                    "342). Sin stops: cerrar en el pico del miedo es lo peor que se puede hacer con esta venta."),
         "aviso_vivo": "previo",
         "confirmaciones": 2,
         "aviso_previo_txt": ("Si cierra asi, la entrada (vender el call spread 2x) es en la sesion siguiente, a las 10:30 de "
-                             "Nueva York ({hora_es} en Espana): te la confirmo a las 15:15. Hoy no vendas: vender el mismo dia "
+                             "Nueva York ({hora_es} en Espana): te la confirmo manana a las 15:15 hora de Espana, antes de la entrada. Hoy no vendas: vender el mismo dia "
                              "no se ha demostrado mejor el primer dia del episodio."),
         "evidencia": ("Backtest a precio medio (spread 2x, senal M2/M1<0, salida a 0,9 de la vida): +8,5 % por operacion "
-                      "sobre la perdida maxima en 2019-2026 y +9,6 % fuera de muestra en 2017-2018. Pagando la horquilla "
-                      "pata a pata: +1,6 % (no se distingue de cero) y +4,9 %. GO CONDICIONAL: solo con orden de spread "
-                      "cerca del precio medio. Misma apuesta que la LONG PUT (UVXY a la baja)."),
+                      "sobre la perdida maxima en 2019-2026 y +9,6 % fuera de muestra en 2017-2018; @APR GO. Misma apuesta "
+                      "que la LONG PUT (UVXY a la baja)."),
     },
 ]
 
