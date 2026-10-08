@@ -1,0 +1,2 @@
+# temporales de escritura atomica (vivo.json.<pid>.tmp, data.json.tmp, index.html.tmp): nunca se publican
+*.tmp
