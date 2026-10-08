@@ -87,7 +87,7 @@ def mensaje(verdes, sin_dato, todos, atrasado, esperado, prueba=False):
                  % (esc(s["nombre"]), esc(s.get("motivo", ""))))
         L.append("")
     if prueba and not verdes and not sin_dato:
-        for s in todos:
+        for s in [x for x in todos if x.get("certificada", True)]:
             L.append("%s: %s (cierre %s: %s %s)." % (esc(s["nombre"]), "VERDE" if s.get("estado") == "SI" else "no",
                                                     semaforos.fecha_corta(s.get("fecha_cierre")), esc(s["variable"]),
                                                     semaforos.txt_valor(s["formato"], s.get("valor"))))
@@ -120,9 +120,11 @@ def main():
     todos = semaforos.evaluar_todos(serie)
     esperado = sesion_anterior(hoy)
     # atrasado: por la fecha del cierre que evalua cada semaforo (no por la ultima fila de la serie)
-    atrasado = any(pd.Timestamp(s["fecha_cierre"]).normalize() < esperado for s in todos if s.get("fecha_cierre"))
-    verdes = [s for s in todos if s.get("estado") == "SI"]
-    sin_dato = [s for s in todos if s.get("estado") == "SIN DATO"]
+    atrasado = any(pd.Timestamp(s["fecha_cierre"]).normalize() < esperado for s in todos
+                   if s.get("fecha_cierre") and s.get("certificada", True))
+    # las tarjetas NO certificadas (informativas) nunca generan Telegram
+    verdes = [s for s in todos if s.get("estado") == "SI" and s.get("certificada", True)]
+    sin_dato = [s for s in todos if s.get("estado") == "SIN DATO" and s.get("certificada", True)]
     for s in todos:
         print("%s: %s (cierre %s, %s %s)%s" % (s["nombre"], s.get("estado"), s.get("fecha_cierre"), s["variable"],
                                                semaforos.txt_valor(s["formato"], s.get("valor")),

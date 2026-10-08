@@ -257,6 +257,7 @@ def construir_semaforos(hist, curva, fiable):
         for x in semaforos.evaluar_vivo_todos(curva, fiable):
             o = ofi.get(x["id"], {})
             x.update({"nombre": o.get("nombre"), "variable": o.get("variable"), "apuesta": o.get("apuesta"),
+                      "certificada": o.get("certificada", True),
                       "formato": o.get("formato"), "oficial_estado": o.get("estado"),
                       "oficial_fecha": o.get("fecha_cierre"), "oficial_valor": o.get("valor")})
             out.append(x)
@@ -270,12 +271,16 @@ def lineas_semaforos(v, html=False):
     """Una linea por semaforo: oficial (manda) + en vivo (provisional). Sin '<' ni '>' en el texto."""
     L = []
     for s in v.get("semaforos", []):
+        if html and not s.get("certificada", True):
+            continue                      # informativa (no certificada): fuera de los Telegram
         fmt = s.get("formato") or "num"
         ofi = s.get("oficial_estado")
         verde = ofi == "SI"
         etq = "VERDE" if verde else ("no" if ofi == "NO" else "sin dato")
         ini = ("\U0001F7E2 " if verde else "\u26AA ") if html else ""
         e = semaforos.esc if html else (lambda x: x)
+        if not s.get("certificada", True):
+            etq += " (informativa, no certificada)"
         nom = ("<b>%s: %s</b>" % (e(s.get("nombre")), etq)) if (html and verde) else ("%s: %s" % (e(s.get("nombre")), etq))
         t = "%s%s (cierre %s: %s %s)" % (ini, nom, semaforos.fecha_corta(s.get("oficial_fecha")),
                                        e(s.get("variable")), semaforos.txt_valor(fmt, s.get("oficial_valor")))

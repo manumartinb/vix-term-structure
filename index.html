@@ -119,6 +119,12 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
 .sem.vivo { border-left-color:#3fb950; border-left-style:dashed; }
 .sem.vivo .sem-luz { background:transparent; border:2px solid #3fb950; box-shadow:0 0 6px #3fb950; }
 .sem.vivo .sem-estado { background:rgba(63,185,80,0.10); color:#7ee787; border:1px dashed #3fb950; }
+/* tarjeta INFORMATIVA (estrategia estudiada y NO certificada): gris, nunca verde, sin accion */
+.sem.gris { border-left-color:#484f58; border-left-style:dotted; background:var(--panel); }
+.sem.gris .sem-luz { background:transparent; border:2px solid #6e7681; box-shadow:none; }
+.sem.gris.reg .sem-luz { background:#6e7681; }
+.sem.gris .sem-estado { background:rgba(110,118,129,0.14); color:#8b949e; }
+.sem.gris .sem-nom { color:#8b949e; }
 </style>
 </head>
 <body>
@@ -309,7 +315,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   ese dia. <b>Reescalado de 2007</b>: hasta el
   23-mar-2007 los futuros del VIX cotizaban a diez veces el indice; esta serie arranca despues
   del cambio para no mezclar escalas.</p>
-  <p>Generado el 2026-10-08 19:12 &middot; datos de mercado publicos, sin garantia de exactitud y
+  <p>Generado el 2026-10-08 22:24 &middot; datos de mercado publicos, sin garantia de exactitud y
   sin fin comercial &middot; esto no es asesoramiento de inversion.</p>
 </div>
 
@@ -367,7 +373,7 @@ function pintaSemaforos(lista){
   if (!cont) return;
   if (!lista.length){ cont.innerHTML = '<div class="sem-vacio">Sin semaforos en data.json</div>'; return; }
   cont.innerHTML = '';
-  var verdes = lista.filter(function(s){ return s.estado === 'SI'; });
+  var verdes = lista.filter(function(s){ return s.estado === 'SI' && s.certificada !== false; });
   if (verdes.length >= 2) {
     var dv = document.createElement('div'); dv.className = 'sem-doble';
     var aps = verdes.map(function(s){ return s.apuesta || ''; });
@@ -378,8 +384,10 @@ function pintaSemaforos(lista){
   }
   lista.forEach(function(s){
     window.SEM_FMT[s.id] = s.formato;
-    var cls = s.estado === 'SI' ? 'si' : (s.estado === 'NO' ? 'no' : 'nd');
-    var etq = s.estado === 'SI' ? 'VERDE' : (s.estado === 'NO' ? 'NO' : 'SIN DATO');
+    var info = s.certificada === false;
+    var cls = info ? ('gris' + (s.estado === 'SI' ? ' reg' : '')) : (s.estado === 'SI' ? 'si' : (s.estado === 'NO' ? 'no' : 'nd'));
+    var etq = info ? (s.estado === 'SI' ? 'EN REGIMEN (informativa)' : (s.estado === 'NO' ? 'FUERA (informativa)' : 'SIN DATO'))
+                   : (s.estado === 'SI' ? 'VERDE' : (s.estado === 'NO' ? 'NO' : 'SIN DATO'));
     var el = document.createElement('div');
     el.className = 'sem ' + cls;
     el.id = 'sem-' + s.id;
@@ -391,7 +399,7 @@ function pintaSemaforos(lista){
       cont.appendChild(el); return;
     }
     var racha = s.estado === 'SI'
-      ? (s.racha + (s.racha === 1 ? ' sesion' : ' sesiones') + ' en verde (desde el ' + fechaSem(s.desde) + ')')
+      ? (s.racha + (s.racha === 1 ? ' sesion' : ' sesiones') + (info ? ' en regimen' : ' en verde') + ' (desde el ' + fechaSem(s.desde) + ')')
       : (s.racha + ' sesiones sin senal (desde el ' + fechaSem(s.desde) + ')');
     el.innerHTML =
       '<div class="sem-head"><span class="sem-luz"></span><span class="sem-nom">' + esc(s.nombre) +
@@ -399,10 +407,11 @@ function pintaSemaforos(lista){
       '<div class="sem-valor">' + esc(s.variable) + ' = <b>' + fmtSem(s.formato, s.valor) + '</b> ' +
         '<span class="sem-mut">cierre oficial del ' + fechaSem(s.fecha_cierre) + '</span></div>' +
       '<div class="sem-vivo" id="semv-' + s.id + '"></div>' +
-      '<div class="sem-acc"><b>' + (s.estado === 'SI' ? 'Que hacer' : 'Ahora') + ':</b> ' +
+      (info ? '<div class="sem-mut"><b>NO CERTIFICADA</b>: tarjeta solo informativa, sin avisos por Telegram.</div>' : '') +
+      '<div class="sem-acc"><b>' + (info ? 'Nota' : (s.estado === 'SI' ? 'Que hacer' : 'Ahora')) + ':</b> ' +
         esc(s.estado === 'SI' ? s.accion_si : s.accion_no) + '</div>' +
-      '<div class="sem-mut">' + racha + ' &middot; ultima luz verde: ' + fechaSem(s.ultima_si) +
-        ' &middot; ultimo ano: ' + s.dias_si_12m + ' sesiones en verde en ' + s.episodios_12m +
+      '<div class="sem-mut">' + racha + (info ? ' &middot; ultima vez en regimen: ' : ' &middot; ultima luz verde: ') + fechaSem(s.ultima_si) +
+        ' &middot; ultimo ano: ' + s.dias_si_12m + (info ? ' sesiones en regimen en ' : ' sesiones en verde en ') + s.episodios_12m +
         (s.episodios_12m === 1 ? ' episodio' : ' episodios') + '</div>' +
       '<div class="sem-plot" id="semp-' + s.id + '"></div>' +
       '<details class="sem-det"><summary>Regla, entrada, salida y evidencia</summary>' +
@@ -419,7 +428,7 @@ function pintaSemaforos(lista){
       Plotly.newPlot('semp-' + s.id, [
         { x:s.hist.f, y:y, type:'scatter', mode:'lines', line:{ color:'#8b949e', width:1.2 },
           hovertemplate:'%{x}: %{y:.2f}<extra></extra>' },
-        { x:xv, y:yv, type:'scatter', mode:'markers', marker:{ color:'#3fb950', size:5 },
+        { x:xv, y:yv, type:'scatter', mode:'markers', marker:{ color: info ? '#8b949e' : '#3fb950', size:5 },
           hovertemplate:'%{x}: %{y:.2f} (verde)<extra></extra>' }
       ], { paper_bgcolor:'#161b22', plot_bgcolor:'#161b22', font:{ color:'#8b949e', size:10 },
            margin:{ l:38, r:8, t:4, b:22 }, height:110, showlegend:false,
@@ -443,7 +452,7 @@ function aplicaVivoSem(){
     if (x.valor === null || x.valor === undefined){
       el.textContent = 'En vivo ' + hora + ': sin dato.'; el.className = 'sem-vivo'; return;
     }
-    var etq = x.estado === 'SI' ? 'VERDE' : 'NO';
+    var etq = x.certificada === false ? (x.estado === 'SI' ? 'EN REGIMEN' : 'FUERA') : (x.estado === 'SI' ? 'VERDE' : 'NO');
     var t = (v.rancio ? 'Ultima lectura en vivo (' : 'En vivo (') + v.momento.slice(8, 10) + '/' +
             v.momento.slice(5, 7) + ' ' + hora + ', provisional): ' + fmtSem(window.SEM_FMT[x.id] || 'num', x.valor) +
             ' -- con este dato el cierre daria ' + etq + (x.fiable ? '' : ' (alguna pata sin precio del momento)') + '.';
@@ -456,7 +465,7 @@ function aplicaVivoSem(){
     /* verde EN VIVO confirmado y oficial aun en NO: la tarjeta lo dice sin hacerse pasar por el oficial */
     var card = document.getElementById('sem-' + x.id);
     if (card) {
-      var verdeVivo = !v.rancio && x.confirmado && x.oficial_estado === 'NO';
+      var verdeVivo = !v.rancio && x.confirmado && x.oficial_estado === 'NO' && x.certificada !== false;
       card.classList.toggle('vivo', verdeVivo);
       var b = card.querySelector('.sem-estado');
       if (b) {

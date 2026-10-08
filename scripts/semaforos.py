@@ -26,6 +26,9 @@ CONTRATO DE CADA ENTRADA
                  sigue siendo con el cierre) | "entrada" (operar en el momento: solo si esta PROBADO)
   confirmaciones lecturas en vivo SEGUIDAS en verde (cada 15 min, patas del momento) para avisar
   aviso_previo_txt  texto del aviso previo (que pasara si cierra asi)
+  certificada    (opcional, defecto True) False = estrategia estudiada y NO certificada: la web la pinta
+                 en GRIS como informativa (nunca 'VERDE', no cuenta para el DOBLE VERDE) y ningun Telegram
+                 la menciona (ni el de las 15:15, ni el de la curva, ni el aviso en vivo).
 El aviso en vivo sale como mucho UNA vez al dia por semaforo (vivo.py --avisos-vivo, estado en
 data/semaforos_vivo_estado.json) y no sale si el semaforo ya esta en verde con el cierre oficial.
 
@@ -105,6 +108,32 @@ SEMAFOROS = [
                       "sobre la perdida maxima en 2019-2026 y +9,6 % fuera de muestra en 2017-2018; @APR GO. Misma apuesta "
                       "que la LONG PUT (UVXY a la baja)."),
     },
+    {
+        "id": "short_put_uvxy",
+        "apuesta": "UVXY sin desplome",
+        "certificada": False,
+        "nombre": "SHORT PUT UVXY",
+        "variable": "M2/M1 - 1",
+        "patas": ("M1", "M2"),
+        "valor": lambda c: c["M2"] / c["M1"] - 1.0,
+        "regla": lambda x: x > 0.10845,
+        "formato": "pct",
+        "regla_txt": ("Contango fuerte: en el cierre oficial M2 queda mas de un 10,85 % por encima de M1 (equivale al percentil "
+                      "85 de M2/M1, calibrado en 2008-2016). NO CERTIFICADA: gana en 2019-2026 pero pierde en 2017-2018 y la "
+                      "senal no predice el retorno; solo recorta la cola."),
+        "accion_si": ("Solo informativo, sin entrada: la SHORT PUT no esta certificada. Si aun asi vendes puts de UVXY (15 a 29 "
+                      "dias, delta 0,1-0,2), hazlo con esta luz encendida: en el estudio, con ella el peor 5 % de las "
+                      "operaciones fue la mitad de malo que sin ella."),
+        "accion_no": "Sin entrada (estrategia no certificada; tarjeta solo informativa).",
+        "salida": ("Si se opera: recomprar al 90 % de los dias que le quedaban al vender (unos 19 dias). Sin stops."),
+        "aviso_vivo": None,
+        "confirmaciones": 2,
+        "aviso_previo_txt": "",
+        "evidencia": ("Precio medio, put a pelo cubierta con efectivo, salida a 0,9 de la vida: +0,94 % por operacion en "
+                      "2019-2026 y -0,21 % en 2017-2018 (fuera de muestra), cuando sin senal daba +0,15 %. @APR NO-GO "
+                      "(correlacion por dia -0,01). Lo unico que aguanta en las dos muestras: la cola (peor 5 % -4,3 % frente "
+                      "a -8,3 % sin senal). Nunca coincide con la LONG PUT ni con la SHORT CALL (es la apuesta contraria)."),
+    },
 ]
 
 HIST_SESIONES = 260      # cuanto historial viaja a la web para la mini grafica
@@ -174,7 +203,7 @@ def _serie_valor(sem, serie):
 def evaluar(sem, serie):
     """Estado OFICIAL de un semaforo sobre la serie diaria de cierres (DataFrame M1..M8)."""
     base = {"id": sem["id"], "nombre": sem["nombre"], "variable": sem["variable"], "formato": sem["formato"],
-            "apuesta": sem.get("apuesta")}
+            "apuesta": sem.get("apuesta"), "certificada": bool(sem.get("certificada", True))}
     if serie is None or len(serie) == 0:
         base.update({"estado": "SIN DATO", "motivo": "No hay serie de cierres oficiales.", "valor": None})
         base.update(textos(sem, pd.Timestamp(dt.date.today())))
