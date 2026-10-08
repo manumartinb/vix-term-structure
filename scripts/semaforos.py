@@ -121,7 +121,7 @@ SEMAFOROS = [
         "formato": "pct",
         "regla_txt": ("Contango fuerte: en el cierre oficial M2 queda mas de un 10,85 % por encima de M1. Umbral fijo calibrado "
                       "en 2008-2016 para cubrir los mismos dias que la senal estudiada (percentil as-of de M2/M1 > 85); no es "
-                      "el percentil 85 de esa muestra. NO CERTIFICADA: gana en 2019-2026 pero pierde en 2017-2018 y la senal "
+                      "el percentil 85 de esa muestra. NO CERTIFICADA: gana en 2019-2025 pero no se confirma en 2017-2018 y la senal "
                       "no predice el retorno; solo recorta la cola."),
         "accion_si": ("Solo informativo, sin entrada: la SHORT PUT no esta certificada. Si aun asi vendes puts de UVXY (15 a 29 "
                       "dias, delta 0,1-0,2), hazlo con esta luz encendida: en el estudio, con ella el peor 5 % de las "
@@ -132,7 +132,8 @@ SEMAFOROS = [
         "confirmaciones": 2,
         "aviso_previo_txt": "",
         "evidencia": ("Regla de esta tarjeta (M2/M1 - 1 > 10,85 %), precio medio, put a pelo cubierta con efectivo, salida a "
-                      "0,9 de la vida: +0,85 % por operacion en 2019-2026 y -0,15 % en 2017-2018 (fuera de muestra), cuando "
+                      "0,9 de la vida: +0,85 % por operacion en 2019-2025 (estas puts casi no cotizan desde sep-2025) y -0,15 % en "
+                      "2017-2018 (fuera de muestra), cuando "
                       "sin senal daba +0,16 %. @APR NO-GO (correlacion por dia -0,01). Lo unico que aguanta en las dos "
                       "muestras: la cola (peor 5 % -6,0 % frente a -12,0 % sin senal en 2019-2026; -7,5 % frente a -11,2 % "
                       "en 2017-2018). Nunca coincide con la LONG PUT ni con la SHORT CALL (es la apuesta contraria)."),
