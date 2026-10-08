@@ -275,9 +275,10 @@ def lineas_semaforos(v, html=False):
         verde = ofi == "SI"
         etq = "VERDE" if verde else ("no" if ofi == "NO" else "sin dato")
         ini = ("\U0001F7E2 " if verde else "\u26AA ") if html else ""
-        nom = ("<b>%s: %s</b>" % (s.get("nombre"), etq)) if (html and verde) else ("%s: %s" % (s.get("nombre"), etq))
+        e = semaforos.esc if html else (lambda x: x)
+        nom = ("<b>%s: %s</b>" % (e(s.get("nombre")), etq)) if (html and verde) else ("%s: %s" % (e(s.get("nombre")), etq))
         t = "%s%s (cierre %s: %s %s)" % (ini, nom, semaforos.fecha_corta(s.get("oficial_fecha")),
-                                       s.get("variable"), semaforos.txt_valor(fmt, s.get("oficial_valor")))
+                                       e(s.get("variable")), semaforos.txt_valor(fmt, s.get("oficial_valor")))
         if s.get("valor") is not None:
             t += ". En vivo %s%s" % (semaforos.txt_valor(fmt, s["valor"]), "" if s.get("fiable") else " (no fiable)")
             if s.get("estado") != ofi:
@@ -438,13 +439,15 @@ def mensaje_aviso_vivo(s, d, hora, prueba=False):
     L = []
     if prueba:
         L.append("<b>PRUEBA del aviso en vivo (no es senal)</b>")
+    esc = semaforos.esc
+    tx = semaforos.textos(d, semaforos.siguiente_sesion(dt.date.today()))   # {hora_es} de la sesion siguiente
     if d.get("aviso_vivo") == "entrada":
-        L.append("\U0001F7E2 <b>ENTRADA EN VIVO: %s</b>" % s.get("nombre"))
+        L.append("\U0001F7E2 <b>ENTRADA EN VIVO: %s</b>" % esc(s.get("nombre")))
     else:
-        L.append("\U0001F7E1 <b>AVISO PREVIO: %s</b>" % s.get("nombre"))
+        L.append("\U0001F7E1 <b>AVISO PREVIO: %s</b>" % esc(s.get("nombre")))
     L.append("En vivo %s = %s a las %s (confirmado en %d lecturas seguidas)."
-             % (s.get("variable"), semaforos.txt_valor(fmt, s.get("valor")), hora, s.get("lecturas_si", 0)))
-    L.append(d.get("accion_si") if d.get("aviso_vivo") == "entrada" else d.get("aviso_previo_txt", ""))
+             % (esc(s.get("variable")), semaforos.txt_valor(fmt, s.get("valor")), hora, s.get("lecturas_si", 0)))
+    L.append(esc(tx["accion_si"] if d.get("aviso_vivo") == "entrada" else tx["aviso_previo_txt"]))
     L.append('<a href="%s">Abrir panel</a>' % URL_WEB)
     return "\n".join(x for x in L if x)
 
@@ -474,10 +477,19 @@ def avisos_vivo(v, e, enviar=None):
 
 def escribir_json(v):
     os.makedirs(SITIO, exist_ok=True)
-    tmp = VIVO_JSON + ".tmp"
+    # tmp UNICO por proceso: a las 17:00 la tarea Vivo y la del Aviso 17h escriben a la vez y con un
+    # tmp compartido el que perdia se caia (auditoria 2026-10-08, B-H3, reproducido en laboratorio)
+    tmp = "%s.%d.tmp" % (VIVO_JSON, os.getpid())
     with io.open(tmp, "w", encoding="utf-8") as fh:
         json.dump(v, fh, indent=1, ensure_ascii=True)
-    os.replace(tmp, VIVO_JSON)
+    for k in range(10):
+        try:
+            os.replace(tmp, VIVO_JSON)
+            break
+        except PermissionError:
+            if k == 9:
+                raise
+            time.sleep(0.3 * (k + 1))
     return VIVO_JSON
 
 

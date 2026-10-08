@@ -868,7 +868,8 @@ function pintaSemaforos(lista){
     if (s.estado !== 'SI' && s.estado !== 'NO'){
       el.innerHTML = '<div class="sem-head"><span class="sem-luz"></span><span class="sem-nom">' +
         esc(s.nombre) + '</span><span class="sem-estado">' + etq + '</span></div>' +
-        '<div class="sem-mut">No hay cierre oficial con el que evaluar la regla.</div>';
+        '<div class="sem-mut">' + esc(s.motivo || 'No hay cierre oficial con el que evaluar la regla.') +
+        (s.fecha_cierre ? ' (cierre oficial del ' + fechaSem(s.fecha_cierre) + ')' : '') + '</div>';
       cont.appendChild(el); return;
     }
     var racha = s.estado === 'SI'
@@ -957,7 +958,11 @@ async function load(){
     return;
   }
 
-  pintaSemaforos(d.semaforos || []);
+  try { pintaSemaforos(d.semaforos || []); }
+  catch (e) {
+    var sc = document.getElementById('semaforos');
+    if (sc) sc.innerHTML = '<div class="sem-vacio">No se pudieron pintar los semaforos.</div>';
+  }
   const cont = document.getElementById('panes');
   cont.innerHTML = '';
   const zonaTxt = { alta:'zona alta', baja:'zona baja', media:'zona media' };

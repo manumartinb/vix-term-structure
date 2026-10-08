@@ -158,7 +158,8 @@ def _habiles_cfe():
         try:
             import pandas_market_calendars as mcal
             dias = mcal.get_calendar("CFE").valid_days(
-                start_date="2004-01-01", end_date="2030-12-31")
+                start_date="2004-01-01",
+                end_date=(pd.Timestamp.today() + pd.DateOffset(years=3)).strftime("%Y-12-31"))
             _HABILES_CFE = set(pd.DatetimeIndex(dias).tz_localize(None).normalize())
         except Exception:
             _HABILES_CFE = False

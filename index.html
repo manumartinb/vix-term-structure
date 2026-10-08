@@ -297,7 +297,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   ese dia. <b>Reescalado de 2007</b>: hasta el
   23-mar-2007 los futuros del VIX cotizaban a diez veces el indice; esta serie arranca despues
   del cambio para no mezclar escalas.</p>
-  <p>Generado el 2026-10-08 10:33 &middot; datos de mercado publicos, sin garantia de exactitud y
+  <p>Generado el 2026-10-08 12:59 &middot; datos de mercado publicos, sin garantia de exactitud y
   sin fin comercial &middot; esto no es asesoramiento de inversion.</p>
 </div>
 
@@ -365,7 +365,8 @@ function pintaSemaforos(lista){
     if (s.estado !== 'SI' && s.estado !== 'NO'){
       el.innerHTML = '<div class="sem-head"><span class="sem-luz"></span><span class="sem-nom">' +
         esc(s.nombre) + '</span><span class="sem-estado">' + etq + '</span></div>' +
-        '<div class="sem-mut">No hay cierre oficial con el que evaluar la regla.</div>';
+        '<div class="sem-mut">' + esc(s.motivo || 'No hay cierre oficial con el que evaluar la regla.') +
+        (s.fecha_cierre ? ' (cierre oficial del ' + fechaSem(s.fecha_cierre) + ')' : '') + '</div>';
       cont.appendChild(el); return;
     }
     var racha = s.estado === 'SI'
@@ -454,7 +455,11 @@ async function load(){
     return;
   }
 
-  pintaSemaforos(d.semaforos || []);
+  try { pintaSemaforos(d.semaforos || []); }
+  catch (e) {
+    var sc = document.getElementById('semaforos');
+    if (sc) sc.innerHTML = '<div class="sem-vacio">No se pudieron pintar los semaforos.</div>';
+  }
   const cont = document.getElementById('panes');
   cont.innerHTML = '';
   const zonaTxt = { alta:'zona alta', baja:'zona baja', media:'zona media' };

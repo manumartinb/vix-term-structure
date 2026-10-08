@@ -18,8 +18,10 @@ CONTRATO DE CADA ENTRADA
             diccionario {"M1": x, ...} (foto en vivo): solo aritmetica sobre columnas.
   regla     f(numero) -> True (verde) / False
   formato   "pct" (se ensena x100 con %) o "num"
-  regla_txt, accion_si, accion_no, salida, evidencia: textos de la tarjeta (ASCII, sin '<' ni '>',
-            porque viajan tambien por Telegram en parse_mode HTML)
+  regla_txt, accion_si, accion_no, salida, evidencia: textos de la tarjeta (ASCII). Pueden llevar
+            {hora_es}: se sustituye por la hora de Espana que corresponde a las 10:30 de Nueva York
+            en el dia de la entrada (16:30 casi todo el ano, 15:30 en las semanas en que EE. UU. y
+            Europa cambian de hora en fechas distintas). Al ir por Telegram se escapan (&, <, >).
   aviso_vivo     None (sin aviso en vivo) | "previo" (aviso de que se esta encendiendo; la entrada
                  sigue siendo con el cierre) | "entrada" (operar en el momento: solo si esta PROBADO)
   confirmaciones lecturas en vivo SEGUIDAS en verde (cada 15 min, patas del momento) para avisar
@@ -32,8 +34,15 @@ El estado oficial es el del ULTIMO CIERRE OFICIAL del CBOE, que la corrida de la
 La accion es para la SESION SIGUIENTE a ese cierre. La lectura en vivo es PROVISIONAL: anticipa
 como puede quedar el cierre de hoy, que es el que mandara manana.
 
+HUECOS (auditoria 2026-10-08, A-H2): si el ULTIMO cierre de la serie no trae todas las patas del
+semaforo, el estado es SIN DATO (con 'motivo'), NUNCA el del ultimo dia valido: antes se
+republicaba el verde de ayer como si fuera de hoy.
+
 Reglas tecnicas del proyecto: ASCII, cp1252.
 """
+
+import html
+import datetime as dt
 
 import numpy as np
 import pandas as pd
@@ -49,17 +58,19 @@ SEMAFOROS = [
         "formato": "pct",
         "regla_txt": ("Verde si en el cierre oficial el segundo futuro (M2) queda por debajo del "
                       "primero (M1): curva en backwardation, M2/M1 - 1 negativo."),
-        "accion_si": ("Comprar put de UVXY con mas de 200 dias a vencimiento y delta entre -0,40 y "
-                      "-0,50, a precio medio, a las 10:30 de Nueva York (16:30 en Espana) de la "
-                      "sesion siguiente al cierre. Cada sesion en verde es una entrada."),
+        "accion_si": ("Comprar puts de UVXY con mas de 200 dias a vencimiento, en los strikes con delta "
+                      "mas cercana a -0,40 y a -0,50, a precio medio, a las 10:30 de Nueva York "
+                      "({hora_es} en Espana) de la sesion siguiente al cierre. Cada sesion en verde es "
+                      "una entrada. La evidencia promedia todos los vencimientos de mas de 200 dias y los "
+                      "dos deltas; el vencimiento mas lejano rinde unos 3 pp menos."),
         "accion_no": "Sin entrada.",
         "salida": ("Vender cuando pase la mitad de los dias que le quedaban a la put al comprarla "
                    "(si quedaban 330, a los 165)."),
         "aviso_vivo": "previo",
         "confirmaciones": 2,
-        "aviso_previo_txt": ("Si cierra asi, la entrada es en la sesion siguiente (16:30 en Espana): te la "
-                             "confirmo a las 15:15. Hoy no compres: comprar el mismo dia no mejora "
-                             "(medido: -0,7 pp el primer dia del episodio)."),
+        "aviso_previo_txt": ("Si cierra asi, la entrada es en la sesion siguiente, a las 10:30 de Nueva York "
+                             "({hora_es} en Espana): te la confirmo a las 15:15. Hoy no compres: comprar el "
+                             "mismo dia no mejora (medido: -0,7 pp el primer dia del episodio)."),
         "evidencia": ("Backtest a precio medio: +17 % por operacion en 2019-2025 y +18 % fuera de "
                       "muestra en 2017-2018. Veredicto GO CONDICIONAL: riesgo de episodios como "
                       "enero de 2020 (primer backwardation de una crisis que luego se agrava)."),
@@ -68,8 +79,62 @@ SEMAFOROS = [
 
 HIST_SESIONES = 260      # cuanto historial viaja a la web para la mini grafica
 SEPARA_EPISODIOS = 7     # dias naturales sin verde que separan dos episodios
+TEXTOS = ("regla_txt", "accion_si", "accion_no", "salida", "evidencia", "aviso_previo_txt")
 
 
+# ------------------------------------------------------------------ horas
+def _domingo_n(anio, mes, n):
+    """n-esimo domingo del mes (n=-1: el ultimo)."""
+    if n > 0:
+        d = dt.date(anio, mes, 1)
+        d += dt.timedelta(days=(6 - d.weekday()) % 7)
+        return d + dt.timedelta(weeks=n - 1)
+    d = dt.date(anio + (mes == 12), mes % 12 + 1, 1) - dt.timedelta(days=1)
+    return d - dt.timedelta(days=(d.weekday() - 6) % 7)
+
+
+def _hora_espana_manual(fecha, hh, mm):
+    """Sin zoneinfo: EE. UU. en verano del 2o domingo de marzo al 1er domingo de noviembre; Europa del
+    ultimo domingo de marzo al ultimo de octubre. Diferencia Madrid - Nueva York: 6 h salvo desfases."""
+    a = fecha.year
+    us = _domingo_n(a, 3, 2) <= fecha < _domingo_n(a, 11, 1)
+    eu = _domingo_n(a, 3, -1) <= fecha < _domingo_n(a, 10, -1)
+    dif = 6 + (1 if eu else 0) - (1 if us else 0)
+    t = dt.datetime(a, fecha.month, fecha.day, hh, mm) + dt.timedelta(hours=dif)
+    return t.strftime("%H:%M")
+
+
+def hora_espana(fecha, hh=10, mm=30):
+    """Hora de Madrid que corresponde a hh:mm de Nueva York el dia 'fecha'."""
+    fecha = pd.Timestamp(fecha).date()
+    try:
+        from zoneinfo import ZoneInfo
+        t = dt.datetime(fecha.year, fecha.month, fecha.day, hh, mm, tzinfo=ZoneInfo("America/New_York"))
+        return t.astimezone(ZoneInfo("Europe/Madrid")).strftime("%H:%M")
+    except Exception:
+        return _hora_espana_manual(fecha, hh, mm)
+
+
+def siguiente_sesion(fecha):
+    """Siguiente dia de lunes a viernes (los festivos no cambian la hora de un dia a otro)."""
+    d = pd.Timestamp(fecha).normalize() + pd.Timedelta(days=1)
+    while d.weekday() >= 5:
+        d += pd.Timedelta(days=1)
+    return d
+
+
+def textos(sem, fecha_accion):
+    """Textos del semaforo con {hora_es} resuelto para el dia de la entrada."""
+    h = hora_espana(fecha_accion)
+    return dict((k, sem.get(k, "").replace("{hora_es}", h)) for k in TEXTOS)
+
+
+def esc(x):
+    """Para Telegram (parse_mode HTML): escapa &, < y > de los textos del registro."""
+    return html.escape("" if x is None else str(x), quote=False)
+
+
+# ------------------------------------------------------------------ evaluacion
 def _serie_valor(sem, serie):
     cols = list(sem["patas"])
     sub = serie[cols].astype(float)
@@ -78,12 +143,20 @@ def _serie_valor(sem, serie):
 
 def evaluar(sem, serie):
     """Estado OFICIAL de un semaforo sobre la serie diaria de cierres (DataFrame M1..M8)."""
-    base = {"id": sem["id"], "nombre": sem["nombre"], "variable": sem["variable"],
-            "formato": sem["formato"], "regla_txt": sem["regla_txt"], "accion_si": sem["accion_si"],
-            "accion_no": sem["accion_no"], "salida": sem["salida"], "evidencia": sem["evidencia"]}
+    base = {"id": sem["id"], "nombre": sem["nombre"], "variable": sem["variable"], "formato": sem["formato"]}
+    if serie is None or len(serie) == 0:
+        base.update({"estado": "SIN DATO", "motivo": "No hay serie de cierres oficiales.", "valor": None})
+        base.update(textos(sem, pd.Timestamp(dt.date.today())))
+        return base
+    ultimo = pd.Timestamp(serie.index[-1])
+    f_acc = siguiente_sesion(ultimo)
+    base.update(textos(sem, f_acc))
+    base.update({"fecha_cierre": ultimo.strftime("%Y-%m-%d"), "fecha_accion": f_acc.strftime("%Y-%m-%d"),
+                 "hora_entrada_es": hora_espana(f_acc)})
     v = _serie_valor(sem, serie)
     if v.empty:
-        base.update({"estado": "SIN DATO"})
+        base.update({"estado": "SIN DATO", "valor": None,
+                     "motivo": "La serie no trae %s validos en ningun cierre." % " y ".join(sem["patas"])})
         return base
     on = v.map(lambda x: bool(sem["regla"](x)))
     f = v.index[-1]
@@ -95,8 +168,8 @@ def evaluar(sem, serie):
     h = v.iloc[-HIST_SESIONES:]
     base.update({
         "estado": "SI" if on.iloc[-1] else "NO",
-        "fecha_cierre": f.strftime("%Y-%m-%d"),
         "valor": round(float(v.iloc[-1]), 6),
+        "fecha_valor": f.strftime("%Y-%m-%d"),
         "racha": int(en_racha.sum()),
         "desde": on.index[en_racha][0].strftime("%Y-%m-%d"),
         "ultima_si": on[on].index.max().strftime("%Y-%m-%d") if on.any() else None,
@@ -107,6 +180,12 @@ def evaluar(sem, serie):
                  "v": [round(float(x), 5) for x in h.values],
                  "on": [1 if sem["regla"](x) else 0 for x in h.values]},
     })
+    if pd.Timestamp(f) < ultimo:
+        # el ultimo cierre no trae las patas: NUNCA se reutiliza el estado del ultimo dia valido
+        base.update({"estado": "SIN DATO", "valor": None,
+                     "motivo": ("El cierre oficial del %s no trae %s validos; el ultimo dato valido es del %s "
+                                "y NO se reutiliza." % (ultimo.strftime("%d/%m/%Y"), " y ".join(sem["patas"]),
+                                                        pd.Timestamp(f).strftime("%d/%m/%Y")))})
     return base
 
 
@@ -152,3 +231,6 @@ if __name__ == "__main__":
               % (r["nombre"], r["estado"], r.get("fecha_cierre"), r["variable"],
                  txt_valor(r["formato"], r.get("valor")), r.get("racha", 0), r["estado"], r.get("desde"),
                  r.get("ultima_si"), r.get("dias_si_12m", 0), r.get("episodios_12m", 0)))
+        if r.get("motivo"):
+            print("   motivo: " + r["motivo"])
+        print("   entrada %s a las %s de Espana" % (r.get("fecha_accion"), r.get("hora_entrada_es")))
