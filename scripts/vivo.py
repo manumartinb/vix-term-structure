@@ -35,6 +35,9 @@ USO
   python vivo.py --enviar        # ademas avisa por Telegram SI hay extremo
   python vivo.py --enviar-siempre  # avisa por Telegram haya extremo o no (tarea de las 17:00)
 
+SEMAFOROS (desde 2026-10-08): vivo.json lleva 'semaforos' (estado del ultimo cierre oficial +
+lectura provisional del instante) y el Telegram de las 17:00 una linea por semaforo.
+
 Reglas tecnicas del proyecto: ASCII, cp1252.
 """
 
@@ -51,6 +54,7 @@ import pandas as pd
 
 import estado
 import percentiles_curva as pcv
+import semaforos
 import descargar_futuros_vix as dfv
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -182,6 +186,8 @@ def construir(verbose=True):
                       "obs": int(n),
                       "fiable": bool(fiable.get("M%d" % i) and fiable.get("M%d" % j))}
 
+    sems = construir_semaforos(hist, curva, fiable)
+
     base = construir_base(serie, f_cierre, r_hist.index, dte_hist, patas, vivos,
                           precios[TICKER_SPOT], medio, dte_hoy)
 
@@ -197,6 +203,7 @@ def construir(verbose=True):
         "max_edad_min": MAX_EDAD_MIN,
         "patas": patas,
         "pares": pares,
+        "semaforos": sems,
     }
 
 
@@ -240,6 +247,43 @@ def construir_base(serie, f_cierre, idx_hist, dte_hist, patas, vivos, spot_tv, m
     return out
 
 
+def construir_semaforos(hist, curva, fiable):
+    """Oficial (ultimo cierre) + en vivo (provisional) de cada semaforo. Nunca tumba vivo.py."""
+    try:
+        ofi = dict((s["id"], s) for s in semaforos.evaluar_todos(hist))
+        out = []
+        for x in semaforos.evaluar_vivo_todos(curva, fiable):
+            o = ofi.get(x["id"], {})
+            x.update({"nombre": o.get("nombre"), "variable": o.get("variable"),
+                      "formato": o.get("formato"), "oficial_estado": o.get("estado"),
+                      "oficial_fecha": o.get("fecha_cierre"), "oficial_valor": o.get("valor")})
+            out.append(x)
+        return out
+    except Exception as e:
+        print("  (semaforos sin calcular: %s)" % str(e)[:150])
+        return []
+
+
+def lineas_semaforos(v, html=False):
+    """Una linea por semaforo: oficial (manda) + en vivo (provisional). Sin '<' ni '>' en el texto."""
+    L = []
+    for s in v.get("semaforos", []):
+        fmt = s.get("formato") or "num"
+        ofi = s.get("oficial_estado")
+        verde = ofi == "SI"
+        etq = "VERDE" if verde else ("no" if ofi == "NO" else "sin dato")
+        ini = ("\U0001F7E2 " if verde else "\u26AA ") if html else ""
+        nom = ("<b>%s: %s</b>" % (s.get("nombre"), etq)) if (html and verde) else ("%s: %s" % (s.get("nombre"), etq))
+        t = "%s%s (cierre %s: %s %s)" % (ini, nom, semaforos.fecha_corta(s.get("oficial_fecha")),
+                                       s.get("variable"), semaforos.txt_valor(fmt, s.get("oficial_valor")))
+        if s.get("valor") is not None:
+            t += ". En vivo %s%s" % (semaforos.txt_valor(fmt, s["valor"]), "" if s.get("fiable") else " (no fiable)")
+            if s.get("estado") != ofi:
+                t += ", hoy cerraria %s" % ("VERDE" if s.get("estado") == "SI" else "en no")
+        L.append(t + ".")
+    return L
+
+
 def pintar(v):
     """Resumen legible para consola y para Telegram."""
     L = []
@@ -266,6 +310,10 @@ def pintar(v):
         L.append("%d parejas con alguna pata no viva (no disparan alerta)." % len(flojos))
     L.append("")
     L.append(linea_base(v["base"]))
+    sl = lineas_semaforos(v)
+    if sl:
+        L.append("")
+        L.extend(["SEMAFORO " + x for x in sl])
     return "\n".join(L)
 
 
@@ -315,7 +363,9 @@ def mensaje_telegram(v, alt, baj):
     else:
         tit = "sin extremos"
     lin = ["<b>CURVA VIX %s</b> | %s (%d/%d patas en vivo)"
-           % (hora, tit, v["patas_en_vivo"], v["patas_total"]),
+           % (hora, tit, v["patas_en_vivo"], v["patas_total"])]
+    lin += lineas_semaforos(v, html=True)
+    lin += [
            "<pre>" + pcv.pintar(pd.Series(
                dict((c, d["pct"]) for c, d in v["pares"].items()
                     if d["pct"] is not None))) + "</pre>"]

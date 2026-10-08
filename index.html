@@ -82,6 +82,33 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
 .footer b { color:var(--text); }
 .footer p + p { margin-top:8px; }
 .err { padding:30px; text-align:center; color:#f85149; }
+/* ---- SEMAFOROS DE ENTRADA (semaforos.py). Tarjetas genericas: una por entrada del registro. */
+.st-sub { font-size:11.5px; font-weight:400; color:var(--muted); margin-left:8px; }
+.sems { max-width:var(--maxw); margin:8px auto 14px auto; display:grid;
+        grid-template-columns:repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap:12px; }
+.sem { background:var(--panel); border:1px solid var(--border); border-left:5px solid #6e7681;
+       border-radius:6px; padding:11px 13px; font-size:12.5px; line-height:1.5; }
+.sem.si { border-left-color:#3fb950; background:#0f1a12; }
+.sem.nd { border-left-color:#d29922; }
+.sem-head { display:flex; align-items:center; gap:9px; margin-bottom:4px; }
+.sem-luz { width:14px; height:14px; border-radius:50%; background:#6e7681; flex:none; }
+.sem.si .sem-luz { background:#3fb950; box-shadow:0 0 8px #3fb950; }
+.sem.nd .sem-luz { background:#d29922; }
+.sem-nom { font-weight:700; font-size:14px; letter-spacing:.3px; }
+.sem-estado { margin-left:auto; font-weight:700; font-size:12px; padding:2px 10px; border-radius:12px;
+              background:rgba(110,118,129,0.20); color:#8b949e; }
+.sem.si .sem-estado { background:rgba(63,185,80,0.18); color:#3fb950; }
+.sem.nd .sem-estado { background:rgba(210,153,34,0.18); color:#d29922; }
+.sem-valor b { font-family:ui-monospace,Menlo,monospace; font-size:15px; color:var(--text); }
+.sem-mut { color:var(--muted); font-size:11.5px; }
+.sem-vivo { color:var(--muted); font-size:11.5px; }
+.sem-vivo.cambia { color:#f0b849; }
+.sem-acc { margin:5px 0; }
+.sem-plot { width:100%; height:110px; margin-top:4px; }
+.sem-det summary { cursor:pointer; color:var(--muted); font-size:11.5px; }
+.sem-det p { margin:5px 0; color:var(--muted); font-size:12px; }
+.sem-det b { color:var(--text); }
+.sem-vacio { color:var(--muted); font-size:12px; padding:8px; }
 </style>
 </head>
 <body>
@@ -120,6 +147,9 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   <div class="vpatas" id="vpatas"></div>
   <div class="vtri" id="vtri"></div>
 </div>
+
+<div class="section-title">Semaforos de entrada <span class="st-sub">verde = la regla da entrada en la sesion siguiente al ultimo cierre oficial</span></div>
+<div id="semaforos" class="sems"><div class="sem-vacio">Cargando semaforos...</div></div>
 
 <div class="dl">
   <a href="data/vix_futuros_M1_M8.csv" download>&darr; CSV historico M1-M8</a>
@@ -264,7 +294,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   ese dia. <b>Reescalado de 2007</b>: hasta el
   23-mar-2007 los futuros del VIX cotizaban a diez veces el indice; esta serie arranca despues
   del cambio para no mezclar escalas.</p>
-  <p>Generado el 2026-10-08 08:00 &middot; datos de mercado publicos, sin garantia de exactitud y
+  <p>Generado el 2026-10-08 09:13 &middot; datos de mercado publicos, sin garantia de exactitud y
   sin fin comercial &middot; esto no es asesoramiento de inversion.</p>
 </div>
 
@@ -307,6 +337,98 @@ function esc(s){
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+/* ---- SEMAFOROS DE ENTRADA. Generico: pinta una tarjeta por cada entrada de
+   d.semaforos (lo escribe semaforos.py). Anadir un semaforo no toca este codigo. */
+window.SEM_FMT = {};
+function fmtSem(fmt, x){
+  if (x === null || x === undefined) return '--';
+  var s = fmt === 'pct' ? (x * 100).toFixed(2) + ' %' : x.toFixed(4);
+  if (x > 0) s = '+' + s;
+  return s.replace('.', ',');
+}
+function fechaSem(iso){ return iso ? iso.slice(8,10) + '/' + iso.slice(5,7) + '/' + iso.slice(0,4) : '--'; }
+function pintaSemaforos(lista){
+  var cont = document.getElementById('semaforos');
+  if (!cont) return;
+  if (!lista.length){ cont.innerHTML = '<div class="sem-vacio">Sin semaforos en data.json</div>'; return; }
+  cont.innerHTML = '';
+  lista.forEach(function(s){
+    window.SEM_FMT[s.id] = s.formato;
+    var cls = s.estado === 'SI' ? 'si' : (s.estado === 'NO' ? 'no' : 'nd');
+    var etq = s.estado === 'SI' ? 'VERDE' : (s.estado === 'NO' ? 'NO' : 'SIN DATO');
+    var el = document.createElement('div');
+    el.className = 'sem ' + cls;
+    el.id = 'sem-' + s.id;
+    if (s.estado !== 'SI' && s.estado !== 'NO'){
+      el.innerHTML = '<div class="sem-head"><span class="sem-luz"></span><span class="sem-nom">' +
+        esc(s.nombre) + '</span><span class="sem-estado">' + etq + '</span></div>' +
+        '<div class="sem-mut">No hay cierre oficial con el que evaluar la regla.</div>';
+      cont.appendChild(el); return;
+    }
+    var racha = s.estado === 'SI'
+      ? (s.racha + (s.racha === 1 ? ' sesion' : ' sesiones') + ' en verde (desde el ' + fechaSem(s.desde) + ')')
+      : (s.racha + ' sesiones sin senal (desde el ' + fechaSem(s.desde) + ')');
+    el.innerHTML =
+      '<div class="sem-head"><span class="sem-luz"></span><span class="sem-nom">' + esc(s.nombre) +
+        '</span><span class="sem-estado">' + etq + '</span></div>' +
+      '<div class="sem-valor">' + esc(s.variable) + ' = <b>' + fmtSem(s.formato, s.valor) + '</b> ' +
+        '<span class="sem-mut">cierre oficial del ' + fechaSem(s.fecha_cierre) + '</span></div>' +
+      '<div class="sem-vivo" id="semv-' + s.id + '"></div>' +
+      '<div class="sem-acc"><b>' + (s.estado === 'SI' ? 'Que hacer' : 'Ahora') + ':</b> ' +
+        esc(s.estado === 'SI' ? s.accion_si : s.accion_no) + '</div>' +
+      '<div class="sem-mut">' + racha + ' &middot; ultima luz verde: ' + fechaSem(s.ultima_si) +
+        ' &middot; ultimo ano: ' + s.dias_si_12m + ' sesiones en verde en ' + s.episodios_12m +
+        (s.episodios_12m === 1 ? ' episodio' : ' episodios') + '</div>' +
+      '<div class="sem-plot" id="semp-' + s.id + '"></div>' +
+      '<details class="sem-det"><summary>Regla, entrada, salida y evidencia</summary>' +
+        '<p><b>Regla:</b> ' + esc(s.regla_txt) + '</p>' +
+        '<p><b>Entrada:</b> ' + esc(s.accion_si) + '</p>' +
+        '<p><b>Salida:</b> ' + esc(s.salida) + '</p>' +
+        '<p><b>Evidencia:</b> ' + esc(s.evidencia) + '</p></details>';
+    cont.appendChild(el);
+    if (s.hist && window.Plotly){
+      var k = s.formato === 'pct' ? 100 : 1;
+      var y = s.hist.v.map(function(x){ return x * k; });
+      var xv = s.hist.f.filter(function(_, i){ return s.hist.on[i]; });
+      var yv = y.filter(function(_, i){ return s.hist.on[i]; });
+      Plotly.newPlot('semp-' + s.id, [
+        { x:s.hist.f, y:y, type:'scatter', mode:'lines', line:{ color:'#8b949e', width:1.2 },
+          hovertemplate:'%{x}: %{y:.2f}<extra></extra>' },
+        { x:xv, y:yv, type:'scatter', mode:'markers', marker:{ color:'#3fb950', size:5 },
+          hovertemplate:'%{x}: %{y:.2f} (verde)<extra></extra>' }
+      ], { paper_bgcolor:'#161b22', plot_bgcolor:'#161b22', font:{ color:'#8b949e', size:10 },
+           margin:{ l:38, r:8, t:4, b:22 }, height:110, showlegend:false,
+           xaxis:{ gridcolor:'#21262d' },
+           yaxis:{ gridcolor:'#21262d', zeroline:true, zerolinecolor:'#f0b849', zerolinewidth:1,
+                   ticksuffix: s.formato === 'pct' ? '%' : '' } },
+         { displayModeBar:false, responsive:true });
+    }
+  });
+  aplicaVivoSem();
+}
+/* La lectura EN VIVO (vivo.json) se superpone a cada tarjeta. Es provisional:
+   anticipa como puede quedar el cierre de hoy, que es el que mandara manana. */
+function aplicaVivoSem(){
+  var v = window.VIVO_SEM;
+  if (!v) return;
+  v.lista.forEach(function(x){
+    var el = document.getElementById('semv-' + x.id);
+    if (!el) return;
+    var hora = v.momento.slice(11, 16);
+    if (x.valor === null || x.valor === undefined){
+      el.textContent = 'En vivo ' + hora + ': sin dato.'; el.className = 'sem-vivo'; return;
+    }
+    var etq = x.estado === 'SI' ? 'VERDE' : 'NO';
+    var t = (v.rancio ? 'Ultima lectura en vivo (' : 'En vivo (') + v.momento.slice(8, 10) + '/' +
+            v.momento.slice(5, 7) + ' ' + hora + ', provisional): ' + fmtSem(window.SEM_FMT[x.id] || 'num', x.valor) +
+            ' -- con este dato el cierre daria ' + etq + (x.fiable ? '' : ' (alguna pata sin precio del momento)') + '.';
+    var cambia = x.estado !== (x.oficial_estado || '');
+    if (cambia && x.oficial_estado) t += ' Distinto del ultimo cierre oficial.';
+    el.textContent = t;
+    el.className = 'sem-vivo' + (cambia ? ' cambia' : '');
+  });
+}
+
 async function load(){
   let d;
   try { d = await (await fetch('data.json?v=' + Date.now())).json(); }
@@ -316,6 +438,7 @@ async function load(){
     return;
   }
 
+  pintaSemaforos(d.semaforos || []);
   const cont = document.getElementById('panes');
   cont.innerHTML = '';
   const zonaTxt = { alta:'zona alta', baja:'zona baja', media:'zona media' };
@@ -545,6 +668,9 @@ load();
     }
     document.getElementById('vtri').textContent = filas.join(NL);
     caja.style.display = 'block';
+    /* semaforos: la misma lectura en vivo se superpone a sus tarjetas */
+    window.VIVO_SEM = { lista: v.semaforos || [], momento: v.momento, rancio: rancio };
+    if (window.aplicaVivoSem) window.aplicaVivoSem();
   }
 
   function carga() {
