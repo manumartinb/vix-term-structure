@@ -940,7 +940,7 @@ function pintaSemaforos(lista){
         { x:s.hist.f, y:y, type:'scatter', mode:'lines', line:{ color:'#8b949e', width:1.2 },
           hovertemplate:'%{x}: %{y:.2f}<extra></extra>' },
         { x:xv, y:yv, type:'scatter', mode:'markers', marker:{ color: info ? '#8b949e' : '#3fb950', size:5 },
-          hovertemplate:'%{x}: %{y:.2f} (verde)<extra></extra>' }
+          hovertemplate:'%{x}: %{y:.2f} ' + (info ? '(en regimen)' : '(verde)') + '<extra></extra>' }
       ], { paper_bgcolor:'#161b22', plot_bgcolor:'#161b22', font:{ color:'#8b949e', size:10 },
            margin:{ l:38, r:8, t:4, b:22 }, height:110, showlegend:false,
            xaxis:{ gridcolor:'#21262d' },
@@ -970,7 +970,7 @@ function aplicaVivoSem(){
     var cambia = x.estado !== (x.oficial_estado || '');
     if (cambia && x.oficial_estado) t += ' Distinto del ultimo cierre oficial.';
     if (x.lecturas_si) t += ' Lleva ' + x.lecturas_si + (x.lecturas_si === 1 ? ' lectura' : ' lecturas') +
-                           ' seguidas en verde' + (x.confirmado ? ' (confirmado).' : '.');
+                           (x.certificada === false ? ' seguidas en regimen.' : ' seguidas en verde' + (x.confirmado ? ' (confirmado).' : '.'));
     el.textContent = t;
     el.className = 'sem-vivo' + (cambia ? ' cambia' : '');
     /* verde EN VIVO confirmado y oficial aun en NO: la tarjeta lo dice sin hacerse pasar por el oficial */
@@ -1174,7 +1174,9 @@ async function load(){
       cont.innerHTML = '';
       lista.forEach(s => {
         const el = document.createElement('div'); el.className = 'estr-pane';
-        el.innerHTML = '<h4>' + esc(s.nombre) + ' <span class="sem-mut">' + esc(s.variable) + ', puntos verdes = dias con senal</span></h4>' +
+        const info = s.certificada === false;
+        el.innerHTML = '<h4>' + esc(s.nombre) + ' <span class="sem-mut">' + esc(s.variable) +
+                       (info ? ', puntos grises = dias en regimen (informativa, no certificada)' : ', puntos verdes = dias con senal') + '</span></h4>' +
                        '<div class="estr-plot" id="estr-' + s.id + '"></div>';
         cont.appendChild(el);
         const k = s.formato === 'pct' ? 100 : 1;
@@ -1182,7 +1184,7 @@ async function load(){
         const xv = s.f.filter((_, i) => s.on[i]); const yv = y.filter((_, i) => s.on[i]);
         Plotly.newPlot('estr-' + s.id, [
           { x: s.f, y: y, type: 'scatter', mode: 'lines', line: { color: '#8b949e', width: 1 }, hovertemplate: '%{x}: %{y:.2f}<extra></extra>' },
-          { x: xv, y: yv, type: 'scatter', mode: 'markers', marker: { color: '#3fb950', size: 3 }, hovertemplate: '%{x}: %{y:.2f} (senal)<extra></extra>' }
+          { x: xv, y: yv, type: 'scatter', mode: 'markers', marker: { color: info ? '#8b949e' : '#3fb950', size: 3 }, hovertemplate: '%{x}: %{y:.2f} ' + (info ? '(en regimen)' : '(senal)') + '<extra></extra>' }
         ], { paper_bgcolor: '#161b22', plot_bgcolor: '#161b22', font: { color: '#8b949e', size: 10 }, height: 260, showlegend: false,
              margin: { l: 40, r: 10, t: 6, b: 28 }, xaxis: { gridcolor: '#21262d' },
              yaxis: { gridcolor: '#21262d', zeroline: true, zerolinecolor: '#f0b849', ticksuffix: s.formato === 'pct' ? '%' : '' } },

@@ -253,11 +253,12 @@ def construir_semaforos(hist, curva, fiable):
     """Oficial (ultimo cierre) + en vivo (provisional) de cada semaforo. Nunca tumba vivo.py."""
     try:
         ofi = dict((s["id"], s) for s in semaforos.evaluar_todos(hist))
+        reg = dict((s["id"], s) for s in semaforos.SEMAFOROS)
         out = []
         for x in semaforos.evaluar_vivo_todos(curva, fiable):
             o = ofi.get(x["id"], {})
             x.update({"nombre": o.get("nombre"), "variable": o.get("variable"), "apuesta": o.get("apuesta"),
-                      "certificada": o.get("certificada", True),
+                      "certificada": bool(reg.get(x["id"], {}).get("certificada", True)),
                       "formato": o.get("formato"), "oficial_estado": o.get("estado"),
                       "oficial_fecha": o.get("fecha_cierre"), "oficial_valor": o.get("valor")})
             out.append(x)
@@ -468,7 +469,7 @@ def avisos_vivo(v, e, enviar=None):
     for s in v.get("semaforos", []):
         d = defs.get(s["id"])
         st = e["sem"].get(s["id"])
-        if not d or not st or not d.get("aviso_vivo"):
+        if not d or not st or not d.get("aviso_vivo") or not d.get("certificada", True):
             continue
         if st.get("avisado") or not s.get("confirmado") or s.get("oficial_estado") == "SI":
             continue

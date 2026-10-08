@@ -28,7 +28,8 @@ CONTRATO DE CADA ENTRADA
   aviso_previo_txt  texto del aviso previo (que pasara si cierra asi)
   certificada    (opcional, defecto True) False = estrategia estudiada y NO certificada: la web la pinta
                  en GRIS como informativa (nunca 'VERDE', no cuenta para el DOBLE VERDE) y ningun Telegram
-                 la menciona (ni el de las 15:15, ni el de la curva, ni el aviso en vivo).
+                 la menciona (ni el de las 15:15, ni el de la curva, ni el aviso en vivo: vivo.avisos_vivo la
+                 salta aunque tenga aviso_vivo).
 El aviso en vivo sale como mucho UNA vez al dia por semaforo (vivo.py --avisos-vivo, estado en
 data/semaforos_vivo_estado.json) y no sale si el semaforo ya esta en verde con el cierre oficial.
 
@@ -118,21 +119,23 @@ SEMAFOROS = [
         "valor": lambda c: c["M2"] / c["M1"] - 1.0,
         "regla": lambda x: x > 0.10845,
         "formato": "pct",
-        "regla_txt": ("Contango fuerte: en el cierre oficial M2 queda mas de un 10,85 % por encima de M1 (equivale al percentil "
-                      "85 de M2/M1, calibrado en 2008-2016). NO CERTIFICADA: gana en 2019-2026 pero pierde en 2017-2018 y la "
-                      "senal no predice el retorno; solo recorta la cola."),
+        "regla_txt": ("Contango fuerte: en el cierre oficial M2 queda mas de un 10,85 % por encima de M1. Umbral fijo calibrado "
+                      "en 2008-2016 para cubrir los mismos dias que la senal estudiada (percentil as-of de M2/M1 > 85); no es "
+                      "el percentil 85 de esa muestra. NO CERTIFICADA: gana en 2019-2026 pero pierde en 2017-2018 y la senal "
+                      "no predice el retorno; solo recorta la cola."),
         "accion_si": ("Solo informativo, sin entrada: la SHORT PUT no esta certificada. Si aun asi vendes puts de UVXY (15 a 29 "
                       "dias, delta 0,1-0,2), hazlo con esta luz encendida: en el estudio, con ella el peor 5 % de las "
-                      "operaciones fue la mitad de malo que sin ella."),
+                      "operaciones fue la mitad de malo que sin ella (-6,0 % frente a -12,0 %, salida a 0,9 de la vida)."),
         "accion_no": "Sin entrada (estrategia no certificada; tarjeta solo informativa).",
         "salida": ("Si se opera: recomprar al 90 % de los dias que le quedaban al vender (unos 19 dias). Sin stops."),
         "aviso_vivo": None,
         "confirmaciones": 2,
         "aviso_previo_txt": "",
-        "evidencia": ("Precio medio, put a pelo cubierta con efectivo, salida a 0,9 de la vida: +0,94 % por operacion en "
-                      "2019-2026 y -0,21 % en 2017-2018 (fuera de muestra), cuando sin senal daba +0,15 %. @APR NO-GO "
-                      "(correlacion por dia -0,01). Lo unico que aguanta en las dos muestras: la cola (peor 5 % -4,3 % frente "
-                      "a -8,3 % sin senal). Nunca coincide con la LONG PUT ni con la SHORT CALL (es la apuesta contraria)."),
+        "evidencia": ("Regla de esta tarjeta (M2/M1 - 1 > 10,85 %), precio medio, put a pelo cubierta con efectivo, salida a "
+                      "0,9 de la vida: +0,85 % por operacion en 2019-2026 y -0,15 % en 2017-2018 (fuera de muestra), cuando "
+                      "sin senal daba +0,16 %. @APR NO-GO (correlacion por dia -0,01). Lo unico que aguanta en las dos "
+                      "muestras: la cola (peor 5 % -6,0 % frente a -12,0 % sin senal en 2019-2026; -7,5 % frente a -11,2 % "
+                      "en 2017-2018). Nunca coincide con la LONG PUT ni con la SHORT CALL (es la apuesta contraria)."),
     },
 ]
 
@@ -260,7 +263,7 @@ def historias(serie):
         v = _serie_valor(s, serie)
         out.append({"id": s["id"], "nombre": s["nombre"], "variable": s["variable"], "formato": s["formato"],
                     "f": [d.strftime("%Y-%m-%d") for d in v.index], "v": [round(float(x), 5) for x in v.values],
-                    "on": [1 if s["regla"](x) else 0 for x in v.values]})
+                    "on": [1 if s["regla"](x) else 0 for x in v.values], "certificada": bool(s.get("certificada", True))})
     return out
 
 
