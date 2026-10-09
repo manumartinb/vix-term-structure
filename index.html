@@ -95,6 +95,10 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
 .sem.si .sem-luz { background:#3fb950; box-shadow:0 0 8px #3fb950; }
 .sem.nd .sem-luz { background:#d29922; }
 .sem-nom { font-weight:700; font-size:14px; letter-spacing:.3px; }
+/* etiqueta de solidez de la evidencia (semaforos.py 'edge') */
+.sem-edge { font-size:10.5px; font-weight:700; letter-spacing:.4px; padding:1px 7px; border-radius:10px; }
+.sem-edge.fuerte { color:#3fb950; border:1px solid #3fb950; }
+.sem-edge.moderado { color:#d29922; border:1px solid #d29922; }
 .sem-estado { margin-left:auto; font-weight:700; font-size:12px; padding:2px 10px; border-radius:12px;
               background:rgba(110,118,129,0.20); color:#8b949e; }
 .sem.si .sem-estado { background:rgba(63,185,80,0.18); color:#3fb950; }
@@ -318,7 +322,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   ese dia. <b>Reescalado de 2007</b>: hasta el
   23-mar-2007 los futuros del VIX cotizaban a diez veces el indice; esta serie arranca despues
   del cambio para no mezclar escalas.</p>
-  <p>Generado el 2026-10-09 09:03 &middot; datos de mercado publicos, sin garantia de exactitud y
+  <p>Generado el 2026-10-09 10:47 &middot; datos de mercado publicos, sin garantia de exactitud y
   sin fin comercial &middot; esto no es asesoramiento de inversion.</p>
 </div>
 
@@ -370,6 +374,10 @@ function fmtSem(fmt, x){
   if (x > 0) s = '+' + s;
   return s.replace('.', ',');
 }
+function edgeTag(s){
+  if (s.edge !== 'fuerte' && s.edge !== 'moderado') return '';
+  return '<span class="sem-edge ' + s.edge + '">EDGE ' + s.edge.toUpperCase() + '</span>';
+}
 function fechaSem(iso){ return iso ? iso.slice(8,10) + '/' + iso.slice(5,7) + '/' + iso.slice(0,4) : '--'; }
 function pintaSemaforos(lista){
   var cont = document.getElementById('semaforos');
@@ -396,7 +404,7 @@ function pintaSemaforos(lista){
     el.id = 'sem-' + s.id;
     if (s.estado !== 'SI' && s.estado !== 'NO'){
       el.innerHTML = '<div class="sem-head"><span class="sem-luz"></span><span class="sem-nom">' +
-        esc(s.nombre) + '</span><span class="sem-estado">' + etq + '</span></div>' +
+        esc(s.nombre) + '</span>' + edgeTag(s) + '<span class="sem-estado">' + etq + '</span></div>' +
         '<div class="sem-mut">' + esc(s.motivo || 'No hay cierre oficial con el que evaluar la regla.') +
         (s.fecha_cierre ? ' (cierre oficial del ' + fechaSem(s.fecha_cierre) + ')' : '') + '</div>';
       cont.appendChild(el); return;
@@ -406,7 +414,7 @@ function pintaSemaforos(lista){
       : (s.racha + ' sesiones sin senal (desde el ' + fechaSem(s.desde) + ')');
     el.innerHTML =
       '<div class="sem-head"><span class="sem-luz"></span><span class="sem-nom">' + esc(s.nombre) +
-        '</span><span class="sem-estado">' + etq + '</span></div>' +
+        '</span>' + edgeTag(s) + '<span class="sem-estado">' + etq + '</span></div>' +
       '<div class="sem-valor">' + esc(s.variable) + ' = <b>' + fmtSem(s.formato, s.valor) + '</b> ' +
         '<span class="sem-mut">cierre oficial del ' + fechaSem(s.fecha_cierre) + '</span></div>' +
       '<div class="sem-vivo" id="semv-' + s.id + '"></div>' +

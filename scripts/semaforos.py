@@ -26,6 +26,8 @@ CONTRATO DE CADA ENTRADA
                  sigue siendo con el cierre) | "entrada" (operar en el momento: solo si esta PROBADO)
   confirmaciones lecturas en vivo SEGUIDAS en verde (cada 15 min, patas del momento) para avisar
   aviso_previo_txt  texto del aviso previo (que pasara si cierra asi)
+  edge           (opcional) 'fuerte' | 'moderado': solidez de la evidencia; se ensena en la tarjeta y en los Telegram
+                 (fuerte = aprueba tambien fuera de muestra; moderado = gana en desarrollo, no confirmada fuera).
   certificada    (opcional, defecto True) False = estrategia estudiada y NO certificada: la web la pinta
                  en GRIS como informativa (nunca 'VERDE', no cuenta para el DOBLE VERDE) y ningun Telegram
                  la menciona (ni el de las 15:15, ni el de la curva, ni el aviso en vivo: vivo.avisos_vivo la
@@ -55,6 +57,7 @@ SEMAFOROS = [
     {
         "id": "long_put_uvxy",
         "apuesta": "UVXY a la baja",
+        "edge": "fuerte",
         "nombre": "LONG PUT UVXY",
         "variable": "M2/M1 - 1",
         "patas": ("M1", "M2"),
@@ -83,6 +86,7 @@ SEMAFOROS = [
     {
         "id": "short_call_uvxy",
         "apuesta": "UVXY a la baja",
+        "edge": "fuerte",
         "nombre": "SHORT CALL UVXY",
         "variable": "M2/M1 - 1",
         "patas": ("M1", "M2"),
@@ -112,31 +116,34 @@ SEMAFOROS = [
     {
         "id": "short_put_uvxy",
         "apuesta": "UVXY sin desplome",
-        "certificada": False,
+        "edge": "moderado",
         "nombre": "SHORT PUT UVXY",
         "variable": "M2/M1 - 1",
         "patas": ("M1", "M2"),
         "valor": lambda c: c["M2"] / c["M1"] - 1.0,
         "regla": lambda x: x > 0.10845,
         "formato": "pct",
-        "regla_txt": ("Contango fuerte: en el cierre oficial M2 queda mas de un 10,85 % por encima de M1. Umbral fijo calibrado "
-                      "en 2008-2016 para cubrir los mismos dias que la senal estudiada (percentil as-of de M2/M1 > 85); no es "
-                      "el percentil 85 de esa muestra. NO CERTIFICADA: gana en 2019-2025 pero no se confirma en 2017-2018 y la senal "
-                      "no predice el retorno; solo recorta la cola."),
-        "accion_si": ("Solo informativo, sin entrada: la SHORT PUT no esta certificada. Si aun asi vendes puts de UVXY (15 a 29 "
-                      "dias, delta 0,1-0,2), hazlo con esta luz encendida: en el estudio, con ella el peor 5 % de las "
-                      "operaciones fue la mitad de malo que sin ella (-6,0 % frente a -12,0 %, salida a 0,9 de la vida)."),
-        "accion_no": "Sin entrada (estrategia no certificada; tarjeta solo informativa).",
-        "salida": ("Si se opera: recomprar al 90 % de los dias que le quedaban al vender (unos 19 dias). Sin stops."),
-        "aviso_vivo": None,
+        "regla_txt": ("Contango fuerte: en el cierre oficial M2 queda mas de un 10,85 % por encima de M1 (umbral fijo calibrado "
+                      "en 2008-2016 para cubrir los mismos dias que la senal estudiada, percentil as-of de M2/M1 > 85). EDGE "
+                      "MODERADO: gana en 2019-2025 (PF 4,5) pero no se confirmo en 2017-2018 (PF 0,76) y la senal sobre todo "
+                      "recorta la cola. Habilitada por decision del usuario (9-oct-2026)."),
+        "accion_si": ("Vender put de UVXY con 15 a 29 dias a vencimiento y delta 0,1-0,2 (strike en torno al 80 % de UVXY), a "
+                      "pelo y con el efectivo para cubrirla (strike x 100), a precio medio, a las 10:30 de Nueva York "
+                      "({hora_es} en Espana) de la sesion siguiente al cierre. Edge moderado: tamano pequeno. Si la put no "
+                      "tiene comprador (bid 0), no se vende."),
+        "accion_no": "Sin entrada.",
+        "salida": ("Recomprar la put cuando pase el 90 % de los dias que le quedaban al vender (unos 19 dias). Sin stops."),
+        "aviso_vivo": "previo",
         "confirmaciones": 2,
-        "aviso_previo_txt": "",
-        "evidencia": ("Regla de esta tarjeta (M2/M1 - 1 > 10,85 %), precio medio, put a pelo cubierta con efectivo, salida a "
-                      "0,9 de la vida: +0,85 % por operacion en 2019-2025 (estas puts casi no cotizan desde sep-2025) y -0,15 % en "
-                      "2017-2018 (fuera de muestra), cuando "
-                      "sin senal daba +0,16 %. @APR NO-GO (correlacion por dia -0,01). Lo unico que aguanta en las dos "
-                      "muestras: la cola (peor 5 % -6,0 % frente a -12,0 % sin senal en 2019-2026; -7,5 % frente a -11,2 % "
-                      "en 2017-2018). Nunca coincide con la LONG PUT ni con la SHORT CALL (es la apuesta contraria)."),
+        "aviso_previo_txt": ("Si cierra asi, la entrada (vender la put) es en la sesion siguiente, a las 10:30 de Nueva York "
+                             "({hora_es} en Espana): te la confirmo manana a las 15:15 hora de Espana, antes de la entrada. "
+                             "Hoy no vendas: vender el mismo dia no mejora."),
+        "evidencia": ("Precio medio, put a pelo cubierta con efectivo, salida a 0,9 de la vida: con la regla de esta tarjeta "
+                      "+0,85 % por operacion en 2019-2025 (estas puts casi no cotizan desde sep-2025) y -0,15 % en 2017-2018 "
+                      "(fuera de muestra), cuando sin senal daba +0,16 %. Con la senal estudiada: PF 4,5 en 2019-2025, 0,76 "
+                      "en 2017-2018 y 2,8 contando 2017-2025 (83 % ganadoras). @APR NO-GO (la senal no gradua el retorno). "
+                      "Lo que aguanta en las dos muestras: la cola (peor 5 % -6,0 % frente a -12,0 % sin senal). Nunca "
+                      "coincide con la LONG PUT ni con la SHORT CALL (apuesta contraria)."),
     },
 ]
 
@@ -207,7 +214,7 @@ def _serie_valor(sem, serie):
 def evaluar(sem, serie):
     """Estado OFICIAL de un semaforo sobre la serie diaria de cierres (DataFrame M1..M8)."""
     base = {"id": sem["id"], "nombre": sem["nombre"], "variable": sem["variable"], "formato": sem["formato"],
-            "apuesta": sem.get("apuesta"), "certificada": bool(sem.get("certificada", True))}
+            "apuesta": sem.get("apuesta"), "certificada": bool(sem.get("certificada", True)), "edge": sem.get("edge")}
     if serie is None or len(serie) == 0:
         base.update({"estado": "SIN DATO", "motivo": "No hay serie de cierres oficiales.", "valor": None})
         base.update(textos(sem, pd.Timestamp(dt.date.today())))

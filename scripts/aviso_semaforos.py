@@ -74,7 +74,7 @@ def mensaje(verdes, sin_dato, todos, atrasado, esperado, prueba=False):
         L.append("")
     for s in verdes:
         fmt = s["formato"]
-        L.append("\U0001F7E2 <b>LUZ VERDE: %s</b>" % esc(s["nombre"]))
+        L.append("\U0001F7E2 <b>LUZ VERDE: %s</b>%s" % (esc(s["nombre"]), (" (edge %s)" % esc(s["edge"])) if s.get("edge") else ""))
         L.append("Cierre oficial %s: %s %s (%s en verde)."
                  % (semaforos.fecha_corta(s["fecha_cierre"]), esc(s["variable"]),
                     semaforos.txt_valor(fmt, s["valor"]),

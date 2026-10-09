@@ -258,7 +258,7 @@ def construir_semaforos(hist, curva, fiable):
         for x in semaforos.evaluar_vivo_todos(curva, fiable):
             o = ofi.get(x["id"], {})
             x.update({"nombre": o.get("nombre"), "variable": o.get("variable"), "apuesta": o.get("apuesta"),
-                      "certificada": bool(reg.get(x["id"], {}).get("certificada", True)),
+                      "certificada": bool(reg.get(x["id"], {}).get("certificada", True)), "edge": reg.get(x["id"], {}).get("edge"),
                       "formato": o.get("formato"), "oficial_estado": o.get("estado"),
                       "oficial_fecha": o.get("fecha_cierre"), "oficial_valor": o.get("valor")})
             out.append(x)
@@ -448,9 +448,9 @@ def mensaje_aviso_vivo(s, d, hora, prueba=False):
     esc = semaforos.esc
     tx = semaforos.textos(d, semaforos.siguiente_sesion(dt.date.today()))   # {hora_es} de la sesion siguiente
     if d.get("aviso_vivo") == "entrada":
-        L.append("\U0001F7E2 <b>ENTRADA EN VIVO: %s</b>" % esc(s.get("nombre")))
+        L.append("\U0001F7E2 <b>ENTRADA EN VIVO: %s</b>%s" % (esc(s.get("nombre")), (" (edge %s)" % esc(d["edge"])) if d.get("edge") else ""))
     else:
-        L.append("\U0001F7E1 <b>AVISO PREVIO: %s</b>" % esc(s.get("nombre")))
+        L.append("\U0001F7E1 <b>AVISO PREVIO: %s</b>%s" % (esc(s.get("nombre")), (" (edge %s)" % esc(d["edge"])) if d.get("edge") else ""))
     L.append("En vivo %s = %s a las %s (confirmado en %d lecturas seguidas)."
              % (esc(s.get("variable")), semaforos.txt_valor(fmt, s.get("valor")), hora, s.get("lecturas_si", 0)))
     L.append(esc(tx["accion_si"] if d.get("aviso_vivo") == "entrada" else tx["aviso_previo_txt"]))
