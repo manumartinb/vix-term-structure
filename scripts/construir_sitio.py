@@ -675,6 +675,9 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   <div class="vtri" id="vtri"></div>
 </div>
 
+<div style="max-width:var(--maxw); margin:14px auto 4px auto; padding:9px 13px; border:1px solid #d29922; border-left:5px solid #d29922;
+            border-radius:6px; background:rgba(210,153,34,0.10); color:#f0b849; font-weight:700; font-size:13.5px; letter-spacing:.3px;">
+  VALORAR COMBINACION DE AMBAS PARA EQUILIBRAR D&Eacute;BITO/MARGEN</div>
 <div class="section-title">Semaforos de entrada <span class="st-sub">verde = la regla da entrada en la sesion siguiente al ultimo cierre oficial</span></div>
 <div id="semaforos" class="sems"><div class="sem-vacio">Cargando semaforos...</div></div>
 
