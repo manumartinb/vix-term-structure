@@ -5,7 +5,8 @@ QUE ES
 Un registro UNICO de reglas operativas (una por estrategia) que leen tres sitios:
   - construir_sitio.py  -> data.json["semaforos"]  -> tarjetas de la web (cierre OFICIAL)
   - vivo.py             -> vivo.json["semaforos"]  -> linea en vivo de la web y del Telegram de las 17:00
-  - aviso_semaforos.py  -> Telegram de LUZ VERDE (L-V 15:15 Madrid, solo si alguno esta en verde)
+  - aviso_semaforos.py  -> utilidades del aviso (sesiones CFE, reintentos); su tarea de las 15:15 esta
+                           DESHABILITADA desde 9-oct-2026: la entrada va en el Telegram de las 17:00 (vivo.py)
 La web pinta las tarjetas de forma generica: ANADIR UN SEMAFORO = anadir una entrada a
 SEMAFOROS (con su funcion 'valor' y su 'regla'). No hay que tocar ni la web ni los avisos.
 
@@ -30,7 +31,7 @@ CONTRATO DE CADA ENTRADA
                  (fuerte = aprueba tambien fuera de muestra; moderado = gana en desarrollo, no confirmada fuera).
   certificada    (opcional, defecto True) False = estrategia estudiada y NO certificada: la web la pinta
                  en GRIS como informativa (nunca 'VERDE', no cuenta para el DOBLE VERDE) y ningun Telegram
-                 la menciona (ni el de las 15:15, ni el de la curva, ni el aviso en vivo: vivo.avisos_vivo la
+                 la menciona (ni el de las 17:00, ni el aviso en vivo: vivo.avisos_vivo la
                  salta aunque tenga aviso_vivo).
 El aviso en vivo sale como mucho UNA vez al dia por semaforo (vivo.py --avisos-vivo, estado en
 data/semaforos_vivo_estado.json) y no sale si el semaforo ya esta en verde con el cierre oficial.
@@ -77,7 +78,7 @@ SEMAFOROS = [
         "aviso_vivo": "previo",
         "confirmaciones": 2,
         "aviso_previo_txt": ("Si cierra asi, la entrada es en la sesion siguiente, a las 10:30 de Nueva York "
-                             "({hora_es} en Espana): te la confirmo manana a las 15:15 hora de Espana, antes de la entrada. Hoy no compres: comprar el "
+                             "({hora_es} en Espana): manana lo confirma el cierre oficial (en la web desde las 08:00) y el Telegram de las 17:00. Hoy no compres: comprar el "
                              "mismo dia no mejora (medido: -0,7 pp el primer dia del episodio)."),
         "evidencia": ("Backtest a precio medio: +17 % por operacion en 2019-2025 y +18 % fuera de "
                       "muestra en 2017-2018. Veredicto GO CONDICIONAL: riesgo de episodios como "
@@ -107,7 +108,7 @@ SEMAFOROS = [
         "aviso_vivo": "previo",
         "confirmaciones": 2,
         "aviso_previo_txt": ("Si cierra asi, la entrada (vender el call spread 2x) es en la sesion siguiente, a las 10:30 de "
-                             "Nueva York ({hora_es} en Espana): te la confirmo manana a las 15:15 hora de Espana, antes de la entrada. Hoy no vendas: vender el mismo dia "
+                             "Nueva York ({hora_es} en Espana): manana lo confirma el cierre oficial (en la web desde las 08:00) y el Telegram de las 17:00. Hoy no vendas: vender el mismo dia "
                              "no se ha demostrado mejor el primer dia del episodio."),
         "evidencia": ("Backtest a precio medio (spread 2x, senal M2/M1<0, salida a 0,9 de la vida): +8,5 % por operacion "
                       "sobre la perdida maxima en 2019-2026 y +9,6 % fuera de muestra en 2017-2018; @APR GO. Misma apuesta "
@@ -136,7 +137,7 @@ SEMAFOROS = [
         "aviso_vivo": "previo",
         "confirmaciones": 2,
         "aviso_previo_txt": ("Si cierra asi, la entrada (vender la put) es en la sesion siguiente, a las 10:30 de Nueva York "
-                             "({hora_es} en Espana): te la confirmo manana a las 15:15 hora de Espana, antes de la entrada. "
+                             "({hora_es} en Espana): manana lo confirma el cierre oficial (en la web desde las 08:00) y el Telegram de las 17:00. "
                              "Hoy no vendas: vender el mismo dia no mejora."),
         "evidencia": ("Precio medio, put a pelo cubierta con efectivo, salida a 0,9 de la vida: con la regla de esta tarjeta "
                       "+0,85 % por operacion en 2019-2025 (estas puts casi no cotizan desde sep-2025) y -0,15 % en 2017-2018 "

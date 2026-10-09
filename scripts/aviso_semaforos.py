@@ -1,7 +1,12 @@
 """
 aviso_semaforos.py -- aviso de LUZ VERDE de los semaforos de entrada (semaforos.py).
 
-CUANDO
+ESTADO (9-oct-2026): la tarea "VIX CURVE Semaforos 15h15" esta DESHABILITADA por orden del usuario
+(todo a las 17:00). La entrada del dia va ahora en el Telegram de las 17:00 (vivo.bloque_entrada),
+que usa de aqui es_sesion, sesion_anterior y enviar_con_reintentos. Este script sigue sirviendo a
+mano (--dry-run, --prueba). Marcha atras: data\_bak_pre_17h_semaforos_20261009\ (XML de la tarea).
+
+CUANDO (historico)
 Tarea "VIX CURVE Semaforos 15h15": lunes a viernes a las 15:15 de Madrid. Es antes de la
 apertura de Nueva York (9:15 NY) y, en las semanas de desfase de cambio de hora de
 octubre/noviembre y marzo, sigue siendo antes de las 10:30 NY (10:15 NY), que es la hora de

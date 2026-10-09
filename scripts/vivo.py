@@ -37,6 +37,10 @@ USO
 
 SEMAFOROS (desde 2026-10-08): vivo.json lleva 'semaforos' (estado del ultimo cierre oficial +
 lectura provisional del instante) y el Telegram de las 17:00 una linea por semaforo.
+DESDE 2026-10-09 (orden del usuario: todo a las 17:00, nada a las 15:15) el Telegram de las 17:00 es
+el UNICO aviso de entrada: si un semaforo certificado esta en VERDE con el cierre oficial, lleva que
+hacer hoy y cuando salir (bloque_entrada). Sale aunque falle TradingView (foto_sin_vivo) y con 3
+intentos de envio. La tarea "VIX CURVE Semaforos 15h15" queda DESHABILITADA.
   python vivo.py --push --avisos-vivo   # (tarea Vivo, cada 15 min) cuenta lecturas seguidas en verde
                  y manda el AVISO EN VIVO como mucho una vez al dia por semaforo
 
@@ -58,6 +62,7 @@ import estado
 import percentiles_curva as pcv
 import semaforos
 import descargar_futuros_vix as dfv
+import aviso_semaforos as avs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITIO = os.path.join(HERE, "sitio")
@@ -260,7 +265,10 @@ def construir_semaforos(hist, curva, fiable):
             x.update({"nombre": o.get("nombre"), "variable": o.get("variable"), "apuesta": o.get("apuesta"),
                       "certificada": bool(reg.get(x["id"], {}).get("certificada", True)), "edge": reg.get(x["id"], {}).get("edge"),
                       "formato": o.get("formato"), "oficial_estado": o.get("estado"),
-                      "oficial_fecha": o.get("fecha_cierre"), "oficial_valor": o.get("valor")})
+                      "oficial_fecha": o.get("fecha_cierre"), "oficial_valor": o.get("valor"),
+                      # para el Telegram de las 17:00 (que hacer si el oficial esta en verde)
+                      "oficial_racha": o.get("racha"), "oficial_motivo": o.get("motivo"),
+                      "accion_si": o.get("accion_si"), "salida": o.get("salida")})
             out.append(x)
         return out
     except Exception as e:
@@ -282,6 +290,8 @@ def lineas_semaforos(v, html=False):
         e = semaforos.esc if html else (lambda x: x)
         if not s.get("certificada", True):
             etq += " (informativa, no certificada)"
+        if html and s.get("edge"):
+            etq += " (edge %s)" % e(s["edge"])
         nom = ("<b>%s: %s</b>" % (e(s.get("nombre")), etq)) if (html and verde) else ("%s: %s" % (e(s.get("nombre")), etq))
         t = "%s%s (cierre %s: %s %s)" % (ini, nom, semaforos.fecha_corta(s.get("oficial_fecha")),
                                        e(s.get("variable")), semaforos.txt_valor(fmt, s.get("oficial_valor")))
@@ -356,15 +366,62 @@ def extremos(v):
     return sorted(alt, key=lambda x: -x[1]), sorted(baj, key=lambda x: x[1])
 
 
+def bloque_entrada(sems, hoy=None):
+    """Lo que hay que HACER hoy segun el cierre oficial (desde 9-oct-2026 va en el Telegram de las
+    17:00; el aviso aparte de las 15:15 se retiro por orden del usuario). Solo semaforos certificados.
+    Verde -> que comprar/vender y cuando salir; SIN DATO -> no se puede evaluar; cierre atrasado ->
+    se dice. Dia sin sesion del CFE -> nada (no hay entrada)."""
+    hoy = pd.Timestamp(hoy or dt.date.today()).normalize()
+    if not avs.es_sesion(hoy):
+        return []
+    e = semaforos.esc
+    cert = [s for s in sems if s.get("certificada", True)]
+    verdes = [s for s in cert if s.get("oficial_estado") == "SI"]
+    L = []
+    if len(verdes) >= 2:
+        L.append("<b>LUZ VERDE DOBLE: %s</b>" % e(" + ".join(s.get("nombre") for s in verdes)))
+        ap = set(s.get("apuesta") for s in verdes)
+        if len(ap) == 1 and None not in ap:
+            L.append("Ojo: es la misma apuesta (%s); se mueven casi a la par. Operar las dos suma riesgo." % e(ap.pop()))
+    if verdes:
+        L.append("Hora: la regla entra a las 10:30 de Nueva York (%s en Espana); este aviso sale despues, "
+                 "asi que se entra al recibirlo. El verde ya se ve en la web desde las 08:00." % semaforos.hora_espana(hoy))
+    for s in verdes:
+        r = s.get("oficial_racha")
+        L.append("\U0001F7E2 <b>ENTRADA HOY: %s</b>%s%s" % (
+            e(s.get("nombre")), (" (edge %s)" % e(s["edge"])) if s.get("edge") else "",
+            "" if not r else (", 1 sesion en verde" if r == 1 else ", %d sesiones en verde" % r)))
+        L.append("Entrada: " + e(s.get("accion_si")))
+        L.append("Salida: " + e(s.get("salida")))
+    for s in cert:
+        if s.get("oficial_estado") == "SIN DATO":
+            L.append("\u26A0\uFE0F <b>%s: SIN DATO</b>. %s Hoy no se puede evaluar la regla."
+                     % (e(s.get("nombre")), e(s.get("oficial_motivo") or "")))
+    esperado = avs.sesion_anterior(hoy)
+    if any(s.get("oficial_fecha") and pd.Timestamp(s["oficial_fecha"]).normalize() < esperado for s in cert):
+        L.append("OJO: el ultimo cierre oficial no es el de la sesion anterior (%s): el dato puede estar atrasado."
+                 % esperado.strftime("%d/%m"))
+    return L
+
+
 def mensaje_telegram(v, alt, baj):
-    """El mensaje de las 17:00, corto: titular, triangulo, base y enlace.
+    """El mensaje de las 17:00, corto: titular, semaforos (y la entrada de hoy si alguno esta en verde
+    con el cierre oficial), triangulo, base y enlace.
 
     OJO: va en parse_mode HTML. NADA de '<' ni '>' sueltos en el texto (un '<=' lo
     toma por etiqueta y Telegram devuelve 400: paso el 5-oct 17:00)."""
     hora = v["momento"][11:16]
     if v["patas_en_vivo"] == 0:
-        # festivo USA o mercado cerrado: mejor decirlo que mandar la curva de ayer
-        return "<b>CURVA VIX %s</b>: sin datos en vivo (mercado cerrado o festivo)." % hora
+        # festivo USA o mercado cerrado: mejor decirlo que mandar la curva de ayer. Los semaforos
+        # oficiales SI van (salen del cierre, no de la lectura en vivo): un fallo de TradingView no
+        # puede tapar una entrada.
+        lin = ["<b>CURVA VIX %s</b>: sin datos en vivo%s." % (
+            hora, "" if avs.es_sesion(pd.Timestamp(v["momento"][:10])) else " (mercado cerrado o festivo)")]
+        if avs.es_sesion(pd.Timestamp(v["momento"][:10])):
+            lin += lineas_semaforos(dict(v, semaforos=[dict(s, valor=None) for s in v.get("semaforos", [])]), html=True)
+            lin += bloque_entrada(v.get("semaforos", []), v["momento"][:10])
+            lin.append('<a href="%s">Abrir panel</a>' % URL_WEB)
+        return "\n".join(lin)
     if alt or baj:
         tit = ", ".join(["%s ALTO %d" % (c, round(p)) for c, p in alt] +
                         ["%s BAJO %d" % (c, round(p)) for c, p in baj])
@@ -374,6 +431,7 @@ def mensaje_telegram(v, alt, baj):
     lin = ["<b>CURVA VIX %s</b> | %s (%d/%d patas en vivo)"
            % (hora, tit, v["patas_en_vivo"], v["patas_total"])]
     lin += lineas_semaforos(v, html=True)
+    lin += bloque_entrada(v.get("semaforos", []), v["momento"][:10])
     lin += [
            "<pre>" + pcv.pintar(pd.Series(
                dict((c, d["pct"]) for c, d in v["pares"].items()
@@ -460,7 +518,7 @@ def mensaje_aviso_vivo(s, d, hora, prueba=False):
 
 def avisos_vivo(v, e, enviar=None):
     """Como mucho UN aviso al dia por semaforo: verde en vivo confirmado, lectura actual fiable y
-    semaforo oficial todavia en NO (si ya esta verde con el cierre, lo cubre el aviso de las 15:15).
+    semaforo oficial todavia en NO (si ya esta verde con el cierre, lo cubre el Telegram de las 17:00).
     Si Telegram falla no se marca como enviado: se reintenta en la lectura siguiente."""
     enviar = enviar or estado.avisar
     defs = dict((s["id"], s) for s in semaforos.SEMAFOROS)
@@ -533,9 +591,33 @@ def publicar(v):
     return True
 
 
+def foto_sin_vivo(error):
+    """Si la lectura en vivo revienta, el Telegram de las 17:00 sale igual con los semaforos del cierre
+    oficial (desde 9-oct-2026 es el UNICO aviso de entrada: no puede depender de TradingView)."""
+    serie = pcv.cargar_serie()
+    hist = serie[serie.index < pd.Timestamp(dt.date.today())]
+    sems = construir_semaforos(hist, {}, {})
+    print("  lectura en vivo FALLIDA (%s): se avisa solo con el cierre oficial" % str(error)[:200])
+    return {"momento": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "patas_en_vivo": 0,
+            "patas_total": dfv.N_MESES, "semaforos": sems, "error_vivo": str(error)[:200]}
+
+
 def main():
     args = sys.argv[1:]
-    v = construir()
+    siempre = "--enviar-siempre" in args
+    try:
+        v = construir()
+    except Exception as exc:
+        if not siempre:
+            raise
+        v = foto_sin_vivo(exc)
+        txt = mensaje_telegram(v, [], [])
+        if "--dry-run" in args:
+            print("--dry-run, mensaje:\n" + txt.encode("ascii", "replace").decode("ascii"))
+            return
+        k = avs.enviar_con_reintentos(txt)
+        print("Aviso (solo cierre oficial) %s." % ("enviado al intento %d" % k if k else "NO enviado"))
+        sys.exit(1)                          # el fallo del vivo tiene que verse en el Programador
     print("")
     print(pintar(v))
     print("")
@@ -552,6 +634,10 @@ def main():
 
     if "--dry-run" in args:
         print("--dry-run: no se escribe nada.")
+        if siempre:
+            alt, baj = extremos(v)
+            print("--dry-run, mensaje de las 17:00:\n"
+                  + mensaje_telegram(v, alt, baj).encode("ascii", "replace").decode("ascii"))
         return
 
     print("Escrito: %s" % escribir_json(v))
@@ -567,8 +653,10 @@ def main():
         if not alt and not baj and "--enviar-siempre" not in args:
             print("Sin extremos fiables: no se envia nada.")
             return
-        if estado.avisar(mensaje_telegram(v, alt, baj)):
-            print("Aviso enviado (%d altos, %d bajos)." % (len(alt), len(baj)))
+        # 3 intentos (0, 20, 60 s): desde 9-oct-2026 este mensaje lleva la ENTRADA del dia
+        k = avs.enviar_con_reintentos(mensaje_telegram(v, alt, baj))
+        if k:
+            print("Aviso enviado al intento %d (%d altos, %d bajos)." % (k, len(alt), len(baj)))
         else:
             # antes imprimia "enviado" y salia con 0 aunque Telegram dijera 400
             # (5-oct 17:00): el fallo quedaba invisible para el Programador de tareas.
