@@ -18,6 +18,9 @@ CONTRATO DE CADA ENTRADA
   valor     f(curva) -> numero. 'curva' admite un DataFrame (historia, vectorizado) o un
             diccionario {"M1": x, ...} (foto en vivo): solo aritmetica sobre columnas.
   regla     f(numero) -> True (verde) / False
+  umbral, umbral_sentido   (opcionales) la raya que cruza la regla y de que lado esta el verde
+            ("menor" = verde por debajo, "mayor" = verde por encima). SOLO se ensenan en la grafica de
+            la web; la que manda es 'regla'. Si no coinciden con ella (umbral_visible) no se dibuja nada.
   formato   "pct" (se ensena x100 con %) o "num"
   regla_txt, accion_si, accion_no, salida, evidencia: textos de la tarjeta (ASCII). Pueden llevar
             {hora_es}: se sustituye por la hora de Espana que corresponde a las 10:30 de Nueva York
@@ -64,6 +67,7 @@ SEMAFOROS = [
         "patas": ("M1", "M2"),
         "valor": lambda c: c["M2"] / c["M1"] - 1.0,
         "regla": lambda x: x < 0.0,
+        "umbral": 0.0, "umbral_sentido": "menor",
         "formato": "pct",
         "regla_txt": ("Verde si en el cierre oficial el segundo futuro (M2) queda por debajo del "
                       "primero (M1): curva en backwardation, M2/M1 - 1 negativo."),
@@ -93,6 +97,7 @@ SEMAFOROS = [
         "patas": ("M1", "M2"),
         "valor": lambda c: c["M2"] / c["M1"] - 1.0,
         "regla": lambda x: x < 0.0,
+        "umbral": 0.0, "umbral_sentido": "menor",
         "formato": "pct",
         "regla_txt": ("Misma senal que la LONG PUT: verde si en el cierre oficial M2 queda por debajo de M1 (backwardation). "
                       "La senal original del Excel (percentil de jugosidad < 15) rinde lo mismo y entra menos dias."),
@@ -123,6 +128,7 @@ SEMAFOROS = [
         "patas": ("M1", "M2"),
         "valor": lambda c: c["M2"] / c["M1"] - 1.0,
         "regla": lambda x: x > 0.10845,
+        "umbral": 0.10845, "umbral_sentido": "mayor",
         "formato": "pct",
         "regla_txt": ("Contango fuerte: en el cierre oficial M2 queda mas de un 10,85 % por encima de M1 (umbral fijo calibrado "
                       "en 2008-2016 para cubrir los mismos dias que la senal estudiada, percentil as-of de M2/M1 > 85). EDGE "
@@ -212,10 +218,33 @@ def _serie_valor(sem, serie):
     return sem["valor"](sub).replace([np.inf, -np.inf], np.nan).dropna()
 
 
+def umbral_visible(sem):
+    """(umbral, sentido) que la web dibuja como raya en la grafica, o (None, None).
+
+    Solo se devuelve si COINCIDE con la 'regla' real: un epsilon por cada lado de la raya tiene que
+    dar verde en el lado que dice 'umbral_sentido' y no en el otro. La regla manda: si alguien
+    cambia una y se olvida de la otra, la web NO dibuja una raya falsa (ausencia antes que un
+    numero que no es el de la regla)."""
+    u = sem.get("umbral")
+    lado = sem.get("umbral_sentido")
+    if u is None or lado not in ("mayor", "menor"):
+        return None, None
+    e = 1e-6
+    try:
+        arriba = bool(sem["regla"](u + e))
+        abajo = bool(sem["regla"](u - e))
+    except Exception:
+        return None, None
+    ok = (arriba and not abajo) if lado == "mayor" else (abajo and not arriba)
+    return (float(u), lado) if ok else (None, None)
+
+
 def evaluar(sem, serie):
     """Estado OFICIAL de un semaforo sobre la serie diaria de cierres (DataFrame M1..M8)."""
+    u, lado = umbral_visible(sem)
     base = {"id": sem["id"], "nombre": sem["nombre"], "variable": sem["variable"], "formato": sem["formato"],
-            "apuesta": sem.get("apuesta"), "certificada": bool(sem.get("certificada", True)), "edge": sem.get("edge")}
+            "apuesta": sem.get("apuesta"), "certificada": bool(sem.get("certificada", True)), "edge": sem.get("edge"),
+            "umbral": u, "umbral_sentido": lado}
     if serie is None or len(serie) == 0:
         base.update({"estado": "SIN DATO", "motivo": "No hay serie de cierres oficiales.", "valor": None})
         base.update(textos(sem, pd.Timestamp(dt.date.today())))

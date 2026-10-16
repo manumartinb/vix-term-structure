@@ -203,7 +203,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
     </div>
     <div class="mvivo" id="sem-m-vivo"></div>
     <div id="sem-modal-plot"></div>
-    <div class="mleg">Linea gris = cierre oficial &middot; puntos verdes = dias con senal &middot; punto de hoy = lectura EN VIVO provisional (relleno verde = daria entrada y esta confirmada; aro verde = daria entrada pero falta confirmar; aro gris = sin entrada). Arrastrar = zoom, doble clic = ver todo, Esc = cerrar.</div>
+    <div class="mleg">Linea naranja = umbral de la regla (el verde cae del lado que indica su etiqueta) &middot; linea gris = cierre oficial &middot; puntos verdes = dias con senal &middot; punto de hoy = lectura EN VIVO provisional (relleno verde = daria entrada y esta confirmada; aro verde = daria entrada pero falta confirmar; aro gris = sin entrada). Arrastrar = zoom, doble clic = ver todo, Esc = cerrar.</div>
   </div>
 </div>
 
@@ -509,6 +509,16 @@ function semVivoPunto(id){
                 : ' -> sin entrada');
   return { fecha: fecha, y: x.valor * h.k, si: si, conf: conf, txt: txt };
 }
+/* Raya de la regla (umbral de semaforos.py, ya validado contra la 'regla' real). Sin umbral en
+   data.json (pagina vieja) no se dibuja nada y queda la raya del 0 de siempre. */
+function semUmbral(id){
+  var h = window.SEM_H[id];
+  var u = h && h.s.umbral;
+  if (u === undefined || u === null) return null;
+  var mayor = h.s.umbral_sentido === 'mayor';
+  return { y: u * h.k, mayor: mayor,
+           txt: 'Umbral ' + fmtSem(h.s.formato, u) + ': verde ' + (mayor ? 'por encima' : 'por debajo') };
+}
 function semTrazas(id, grande){
   var h = window.SEM_H[id];
   if (!h) return [];
@@ -528,6 +538,12 @@ function semTrazas(id, grande){
                            color: lv.conf ? '#3fb950' : '#161b22',
                            line:{ color: lv.si ? '#7ee787' : '#8b949e', width: 2 } } });
   }
+  var um = semUmbral(id);
+  if (um){
+    /* punto invisible: obliga al eje Y a incluir la raya aunque quede fuera de los datos */
+    trazas.push({ x:[f[0]], y:[um.y], type:'scatter', mode:'markers', hoverinfo:'skip',
+                  marker:{ size:1, opacity:0 } });
+  }
   return trazas;
 }
 function semLayout(id, grande){
@@ -539,6 +555,17 @@ function semLayout(id, grande){
               yaxis:{ gridcolor:'#21262d', zeroline:true, zerolinecolor:'#f0b849', zerolinewidth:1,
                       ticksuffix: h.s.formato === 'pct' ? '%' : '' } };
   if (grande) lay.hovermode = 'closest'; else { lay.height = 110; lay.dragmode = false; }
+  var um = semUmbral(id);
+  if (um){
+    /* la raya naranja pasa a ser la del umbral de la regla (antes siempre el 0) */
+    lay.yaxis.zeroline = false;
+    lay.shapes = [{ type:'line', xref:'paper', x0:0, x1:1, yref:'y', y0:um.y, y1:um.y,
+                    line:{ color:'#f0b849', width:1 } }];
+    lay.annotations = [{ xref:'paper', x:0.01, xanchor:'left', yref:'y', y:um.y,
+                         yanchor: um.mayor ? 'bottom' : 'top', text:um.txt, showarrow:false,
+                         font:{ color:'#f0b849', size: grande ? 12 : 9 },
+                         bgcolor:'rgba(22,27,34,0.75)' }];
+  }
   return lay;
 }
 /* Rango de la ventana grande: ultimos `dias` (0 = toda la historia), con el eje Y ajustado
@@ -554,6 +581,8 @@ function semRango(id, dias){
     if (f[i] >= iniS){ if (y[i] < lo) lo = y[i]; if (y[i] > hi) hi = y[i]; }
   }
   if (lv){ if (lv.y < lo) lo = lv.y; if (lv.y > hi) hi = lv.y; }
+  var um = semUmbral(id);
+  if (um){ if (um.y < lo) lo = um.y; if (um.y > hi) hi = um.y; }
   if (lo === Infinity){ lo = -1; hi = 1; }
   var pad = (hi - lo) * 0.08 || 1;
   var dv = (fin.getTime() - ini.getTime()) / 86400000;
