@@ -619,7 +619,28 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
 .sem-vivo { color:var(--muted); font-size:11.5px; }
 .sem-vivo.cambia { color:#f0b849; }
 .sem-acc { margin:5px 0; }
-.sem-plot { width:100%; height:110px; margin-top:4px; }
+.sem-plot { width:100%; height:110px; }
+.sem-plotwrap { margin-top:4px; cursor:zoom-in; }
+.sem-pbar { display:flex; align-items:center; gap:8px; margin-top:6px; }
+.sem-pbar .sem-mut { flex:1; }
+.sem-ampl { background:transparent; color:var(--muted); border:1px solid var(--border); border-radius:4px;
+            font-size:11px; padding:1px 9px; cursor:pointer; }
+.sem-ampl:hover { color:var(--text); border-color:#6e7681; }
+#sem-modal { display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:1000;
+             background:rgba(1,4,9,0.80); }
+#sem-modal.on { display:flex; align-items:center; justify-content:center; }
+#sem-modal .mbox { width:min(1400px, 96vw); background:var(--panel); border:1px solid var(--border);
+                   border-radius:8px; padding:12px 16px 10px 16px; }
+#sem-modal .mhead { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px; }
+#sem-modal .mtit { font-weight:700; font-size:15px; }
+#sem-modal .mrng button, #sem-modal .mx { background:transparent; color:var(--muted); border:1px solid var(--border);
+                   border-radius:4px; font-size:12px; padding:2px 10px; cursor:pointer; margin-right:4px; }
+#sem-modal .mrng button:hover, #sem-modal .mx:hover { color:var(--text); border-color:#6e7681; }
+#sem-modal .mx { margin-left:auto; margin-right:0; }
+#sem-modal .mvivo { font-size:12px; color:var(--muted); margin:2px 0 6px 0; }
+#sem-modal .mvivo.cambia { color:#f0b849; }
+#sem-modal .mleg { font-size:11px; color:var(--muted); margin-top:2px; }
+#sem-modal-plot { width:100%; height:min(66vh, 620px); }
 .sem-det summary { cursor:pointer; color:var(--muted); font-size:11.5px; }
 .sem-det p { margin:5px 0; color:var(--muted); font-size:12px; }
 .sem-det b { color:var(--text); }
@@ -684,6 +705,18 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   VALORAR COMBINACION DE AMBAS PARA EQUILIBRAR D&Eacute;BITO/MARGEN</div>
 <div class="section-title">Semaforos de entrada <span class="st-sub">verde = la regla da entrada en la sesion siguiente al ultimo cierre oficial</span></div>
 <div id="semaforos" class="sems"><div class="sem-vacio">Cargando semaforos...</div></div>
+<div id="sem-modal">
+  <div class="mbox">
+    <div class="mhead">
+      <span class="mtit" id="sem-m-tit"></span>
+      <span class="mrng"><button data-d="31">1M</button><button data-d="92">3M</button><button data-d="183">6M</button><button data-d="365">1A</button></span>
+      <button class="mx" id="sem-m-x">Cerrar &times;</button>
+    </div>
+    <div class="mvivo" id="sem-m-vivo"></div>
+    <div id="sem-modal-plot"></div>
+    <div class="mleg">Linea gris = cierre oficial &middot; puntos verdes = dias con senal &middot; punto de hoy = lectura EN VIVO provisional (relleno verde = daria entrada y esta confirmada; aro verde = daria entrada pero falta confirmar; aro gris = sin entrada). Arrastrar = zoom, doble clic = ver todo, Esc = cerrar.</div>
+  </div>
+</div>
 
 <div class="dl">
   <a href="data/vix_futuros_M1_M8.csv" download>&darr; CSV historico M1-M8</a>
@@ -935,33 +968,156 @@ function pintaSemaforos(lista){
       '<div class="sem-mut">' + racha + (info ? ' &middot; ultima vez en regimen: ' : ' &middot; ultima luz verde: ') + fechaSem(s.ultima_si) +
         ' &middot; ultimo ano: ' + s.dias_si_12m + (info ? ' sesiones en regimen en ' : ' sesiones en verde en ') + s.episodios_12m +
         (s.episodios_12m === 1 ? ' episodio' : ' episodios') + '</div>' +
-      '<div class="sem-plot" id="semp-' + s.id + '"></div>' +
+      '<div class="sem-pbar"><span class="sem-mut">Punto de hoy EN VIVO: verde = daria entrada, gris = no</span>' +
+        '<button class="sem-ampl" type="button">Ampliar</button></div>' +
+      '<div class="sem-plotwrap"><div class="sem-plot" id="semp-' + s.id + '"></div></div>' +
       '<details class="sem-det"><summary>Regla, entrada, salida y evidencia</summary>' +
         '<p><b>Regla:</b> ' + esc(s.regla_txt) + '</p>' +
         '<p><b>Entrada:</b> ' + esc(s.accion_si) + '</p>' +
         '<p><b>Salida:</b> ' + esc(s.salida) + '</p>' +
         '<p><b>Evidencia:</b> ' + esc(s.evidencia) + '</p></details>';
     cont.appendChild(el);
+    var btnAmpl = el.querySelector('.sem-ampl');
+    if (btnAmpl) btnAmpl.addEventListener('click', function(){ semAmplia(s.id); });
+    var wrap = el.querySelector('.sem-plotwrap');
+    if (wrap) wrap.addEventListener('click', function(){ semAmplia(s.id); });
     if (s.hist && window.Plotly){
       var k = s.formato === 'pct' ? 100 : 1;
       var y = s.hist.v.map(function(x){ return x * k; });
-      var xv = s.hist.f.filter(function(_, i){ return s.hist.on[i]; });
-      var yv = y.filter(function(_, i){ return s.hist.on[i]; });
-      Plotly.newPlot('semp-' + s.id, [
-        { x:s.hist.f, y:y, type:'scatter', mode:'lines', line:{ color:'#8b949e', width:1.2 },
-          hovertemplate:'%{x}: %{y:.2f}<extra></extra>' },
-        { x:xv, y:yv, type:'scatter', mode:'markers', marker:{ color: info ? '#8b949e' : '#3fb950', size:5 },
-          hovertemplate:'%{x}: %{y:.2f} ' + (info ? '(en regimen)' : '(verde)') + '<extra></extra>' }
-      ], { paper_bgcolor:'#161b22', plot_bgcolor:'#161b22', font:{ color:'#8b949e', size:10 },
-           margin:{ l:38, r:8, t:4, b:22 }, height:110, showlegend:false,
-           xaxis:{ gridcolor:'#21262d' },
-           yaxis:{ gridcolor:'#21262d', zeroline:true, zerolinecolor:'#f0b849', zerolinewidth:1,
-                   ticksuffix: s.formato === 'pct' ? '%' : '' } },
-         { displayModeBar:false, responsive:true });
+      window.SEM_H[s.id] = {
+        s: s, k: k, info: info, y: y,
+        xv: s.hist.f.filter(function(_, i){ return s.hist.on[i]; }),
+        yv: y.filter(function(_, i){ return s.hist.on[i]; })
+      };
+      Plotly.newPlot('semp-' + s.id, semTrazas(s.id, false), semLayout(s.id, false), SEM_CFG_MINI);
     }
   });
   aplicaVivoSem();
 }
+/* Historia + punto EN VIVO de cada tarjeta. window.SEM_H[id] guarda lo necesario para
+   pintar el mismo grafico pequeno en la tarjeta y grande en la ventana de Ampliar. */
+window.SEM_H = {};
+window.SEM_MODAL = null;
+var SEM_CFG_MINI = { displayModeBar:false, responsive:true };
+var SEM_CFG_GRANDE = { displaylogo:false, responsive:true,
+                       modeBarButtonsToRemove:['select2d', 'lasso2d', 'autoScale2d'] };
+/* Punto de hoy: sale de la lectura en vivo (vivo.json). Si la lectura es vieja (rancia) o
+   si el cierre oficial de hoy ya esta en la historia, no se pinta: manda el oficial. */
+function semVivoPunto(id){
+  var v = window.VIVO_SEM, h = window.SEM_H[id];
+  if (!v || v.rancio || !h) return null;
+  var x = null;
+  v.lista.forEach(function(e){ if (e.id === id) x = e; });
+  if (!x || x.valor === null || x.valor === undefined) return null;
+  var fecha = v.momento.slice(0, 10);
+  var f = h.s.hist.f;
+  if (f.length && f[f.length - 1] >= fecha) return null;
+  var si = x.estado === 'SI' && x.certificada !== false;
+  var conf = si && !!x.confirmado;
+  var txt = 'EN VIVO ' + fecha.slice(8, 10) + '/' + fecha.slice(5, 7) + ' ' + v.momento.slice(11, 16) +
+            ' (provisional): ' + fmtSem(h.s.formato, x.valor) +
+            (si ? (conf ? ' -> daria entrada (confirmado)' : ' -> daria entrada (falta confirmar)')
+                : ' -> sin entrada');
+  return { fecha: fecha, y: x.valor * h.k, si: si, conf: conf, txt: txt };
+}
+function semTrazas(id, grande){
+  var h = window.SEM_H[id];
+  if (!h) return [];
+  var f = h.s.hist.f;
+  var trazas = [
+    { x:f, y:h.y, type:'scatter', mode:'lines', line:{ color:'#8b949e', width: grande ? 1.4 : 1.2 },
+      hovertemplate:'%{x}: %{y:.2f}<extra></extra>' },
+    { x:h.xv, y:h.yv, type:'scatter', mode:'markers', marker:{ color: h.info ? '#8b949e' : '#3fb950', size: grande ? 7 : 5 },
+      hovertemplate:'%{x}: %{y:.2f} ' + (h.info ? '(en regimen)' : '(verde)') + '<extra></extra>' }
+  ];
+  var lv = semVivoPunto(id);
+  if (lv){
+    trazas.push({ x:[f[f.length - 1], lv.fecha], y:[h.y[h.y.length - 1], lv.y], type:'scatter', mode:'lines',
+                  line:{ color:'#f0b849', width:1.2, dash:'dot' }, hoverinfo:'skip' });
+    trazas.push({ x:[lv.fecha], y:[lv.y], type:'scatter', mode:'markers', text:[lv.txt], hoverinfo:'text',
+                  marker:{ size: grande ? 14 : 10, symbol:'circle',
+                           color: lv.conf ? '#3fb950' : '#161b22',
+                           line:{ color: lv.si ? '#7ee787' : '#8b949e', width: 2 } } });
+  }
+  return trazas;
+}
+function semLayout(id, grande){
+  var h = window.SEM_H[id];
+  var lay = { paper_bgcolor:'#161b22', plot_bgcolor:'#161b22', font:{ color:'#8b949e', size: grande ? 12 : 10 },
+              margin: grande ? { l:52, r:16, t:8, b:34 } : { l:38, r:8, t:4, b:22 },
+              showlegend:false, uirevision: id + (grande ? '-g' + (window.SEM_REV || '') : '-p'),
+              xaxis:{ gridcolor:'#21262d' },
+              yaxis:{ gridcolor:'#21262d', zeroline:true, zerolinecolor:'#f0b849', zerolinewidth:1,
+                      ticksuffix: h.s.formato === 'pct' ? '%' : '' } };
+  if (grande) lay.hovermode = 'closest'; else { lay.height = 110; lay.dragmode = false; }
+  return lay;
+}
+/* Rango de la ventana grande: ultimos `dias` (0 = toda la historia), con el eje Y ajustado
+   a lo que se ve (Plotly no reajusta Y solo al cambiar el rango de X). */
+function semRango(id, dias){
+  var h = window.SEM_H[id], f = h.s.hist.f, y = h.y;
+  var lv = semVivoPunto(id);
+  var fin = new Date((lv ? lv.fecha : f[f.length - 1]) + 'T00:00:00Z');
+  var ini = dias ? new Date(fin.getTime() - dias * 86400000) : new Date(f[0] + 'T00:00:00Z');
+  var iniS = ini.toISOString().slice(0, 10);
+  var lo = Infinity, hi = -Infinity;
+  for (var i = 0; i < f.length; i++){
+    if (f[i] >= iniS){ if (y[i] < lo) lo = y[i]; if (y[i] > hi) hi = y[i]; }
+  }
+  if (lv){ if (lv.y < lo) lo = lv.y; if (lv.y > hi) hi = lv.y; }
+  if (lo === Infinity){ lo = -1; hi = 1; }
+  var pad = (hi - lo) * 0.08 || 1;
+  var dv = (fin.getTime() - ini.getTime()) / 86400000;
+  var fin2 = new Date(fin.getTime() + Math.max(3, dv * 0.02) * 86400000).toISOString().slice(0, 10);
+  return { x:[iniS, fin2], y:[lo - pad, hi + pad] };
+}
+function semAmplia(id){
+  var h = window.SEM_H[id];
+  if (!h || !window.Plotly) return;
+  window.SEM_MODAL = id;
+  window.SEM_REV = String(Date.now());
+  document.getElementById('sem-m-tit').textContent = h.s.nombre + '  |  ' + h.s.variable;
+  document.getElementById('sem-modal').classList.add('on');
+  semPintaModal(true);
+}
+function semPintaModal(abrir){
+  var id = window.SEM_MODAL;
+  if (!id || !window.SEM_H[id]) return;
+  var el = document.getElementById('semv-' + id);
+  var tv = document.getElementById('sem-m-vivo');
+  tv.textContent = el ? el.textContent : '';
+  tv.className = 'mvivo' + (el && el.className.indexOf('cambia') >= 0 ? ' cambia' : '');
+  var lay = semLayout(id, true);
+  var g = document.getElementById('sem-modal-plot');
+  if (abrir){ var r = semRango(id, 365); lay.xaxis.range = r.x; lay.yaxis.range = r.y; }
+  else if (g && g._fullLayout){
+    /* refresco en vivo con la ventana abierta: se conserva el zoom que el usuario tenga puesto */
+    var fl = g._fullLayout;
+    if (!fl.xaxis.autorange) lay.xaxis.range = fl.xaxis.range.slice();
+    if (!fl.yaxis.autorange) lay.yaxis.range = fl.yaxis.range.slice();
+  }
+  Plotly.react('sem-modal-plot', semTrazas(id, true), lay, SEM_CFG_GRANDE);
+}
+function semCierra(){
+  window.SEM_MODAL = null;
+  document.getElementById('sem-modal').classList.remove('on');
+  if (window.Plotly) Plotly.purge('sem-modal-plot');
+}
+(function(){
+  var m = document.getElementById('sem-modal');
+  if (!m) return;
+  m.addEventListener('click', function(e){ if (e.target === m) semCierra(); });
+  document.getElementById('sem-m-x').addEventListener('click', semCierra);
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && window.SEM_MODAL) semCierra(); });
+  Array.prototype.forEach.call(m.querySelectorAll('.mrng button'), function(b){
+    b.addEventListener('click', function(){
+      var id = window.SEM_MODAL;
+      if (!id || !window.SEM_H[id]) return;
+      var r = semRango(id, parseInt(b.getAttribute('data-d'), 10));
+      Plotly.relayout('sem-modal-plot', { 'xaxis.range': r.x, 'yaxis.range': r.y });
+    });
+  });
+})();
 /* La lectura EN VIVO (vivo.json) se superpone a cada tarjeta. Es provisional:
    anticipa como puede quedar el cierre de hoy, que es el que mandara manana. */
 function aplicaVivoSem(){
@@ -996,6 +1152,15 @@ function aplicaVivoSem(){
       }
     }
   });
+  /* el punto de hoy de cada grafico sigue a la lectura en vivo (este refresco corre cada 5 min);
+     tambien se redibuja si la lectura se vuelve rancia, para que el punto viejo desaparezca */
+  if (window.Plotly){
+    Object.keys(window.SEM_H).forEach(function(id){
+      var pm = document.getElementById('semp-' + id);
+      if (pm && pm.data) Plotly.react(pm, semTrazas(id, false), semLayout(id, false), SEM_CFG_MINI);
+    });
+    semPintaModal(false);
+  }
 }
 
 async function load(){
