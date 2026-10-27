@@ -126,6 +126,7 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
                    border-radius:4px; font-size:12px; padding:2px 10px; cursor:pointer; margin-right:4px; }
 #sem-modal .mrng button:hover, #sem-modal .mx:hover { color:var(--text); border-color:#6e7681; }
 #sem-modal .mx { margin-left:auto; margin-right:0; }
+#sem-modal .maviso { font-size:11px; color:#f0b849; }
 #sem-modal .mvivo { font-size:12px; color:var(--muted); margin:2px 0 6px 0; }
 #sem-modal .mvivo.cambia { color:#f0b849; }
 #sem-modal .mleg { font-size:11px; color:var(--muted); margin-top:2px; }
@@ -198,7 +199,8 @@ details.sec[open] > summary { border-radius:6px 6px 0 0; }
   <div class="mbox">
     <div class="mhead">
       <span class="mtit" id="sem-m-tit"></span>
-      <span class="mrng"><button data-d="31">1M</button><button data-d="92">3M</button><button data-d="183">6M</button><button data-d="365">1A</button></span>
+      <span class="mrng"><button data-d="31">1M</button><button data-d="92">3M</button><button data-d="183">6M</button><button data-d="365">1A</button><button data-d="1096">3A</button><button data-d="1826">5A</button><button data-d="3653">10A</button><button data-d="0">Todo</button></span>
+      <span class="maviso" id="sem-m-aviso"></span>
       <button class="mx" id="sem-m-x">Cerrar &times;</button>
     </div>
     <div class="mvivo" id="sem-m-vivo"></div>
@@ -490,6 +492,46 @@ window.SEM_MODAL = null;
 var SEM_CFG_MINI = { displayModeBar:false, responsive:true };
 var SEM_CFG_GRANDE = { displaylogo:false, responsive:true,
                        modeBarButtonsToRemove:['select2d', 'lasso2d', 'autoScale2d'] };
+/* Historia completa para la ventana de Ampliar. data.json solo trae las ultimas 260 sesiones (bastan para la
+   miniatura); la ventana grande pide estr.json (toda la historia desde 2007) la primera vez que se abre y la
+   guarda. Las miniaturas siguen con las 260. Si la peticion falla, la ventana se queda con las 260 y lo avisa. */
+window.SEM_FULL = null;
+window.SEM_FULL_P = null;
+window.SEM_MODAL_FULL = false;
+window.SEM_DBL = false;
+function semCargaCompleta(){
+  if (window.SEM_FULL_P) return window.SEM_FULL_P;
+  window.SEM_FULL_P = fetch('estr.json?v=' + Date.now()).then(function(r){
+    if (!r.ok) throw new Error('estr.json ' + r.status);
+    return r.json();
+  }).then(function(lista){
+    var m = {};
+    lista.forEach(function(s){
+      var h = window.SEM_H[s.id];
+      if (!h || !s.f || !s.f.length) return;
+      var y = s.v.map(function(x){ return x * h.k; });
+      m[s.id] = { f: s.f, y: y,
+                  xv: s.f.filter(function(_, i){ return s.on[i]; }),
+                  yv: y.filter(function(_, i){ return s.on[i]; }) };
+    });
+    window.SEM_FULL = m;
+    return m;
+  }, function(e){
+    window.SEM_FULL_P = null;   /* permite reintentar al pulsar otro periodo */
+    throw e;
+  });
+  return window.SEM_FULL_P;
+}
+function semAviso(txt){
+  var a = document.getElementById('sem-m-aviso');
+  if (a) a.textContent = txt || '';
+}
+/* Serie que se dibuja: la completa en la ventana grande si ya esta cargada; si no, las 260 de data.json. */
+function semDatos(id, grande){
+  var h = window.SEM_H[id];
+  var c = grande && window.SEM_FULL && window.SEM_FULL[id];
+  return c || { f: h.s.hist.f, y: h.y, xv: h.xv, yv: h.yv };
+}
 /* Punto de hoy: sale de la lectura en vivo (vivo.json). Si la lectura es vieja (rancia) o
    si el cierre oficial de hoy ya esta en la historia, no se pinta: manda el oficial. */
 function semVivoPunto(id){
@@ -522,16 +564,16 @@ function semUmbral(id){
 function semTrazas(id, grande){
   var h = window.SEM_H[id];
   if (!h) return [];
-  var f = h.s.hist.f;
+  var d = semDatos(id, grande), f = d.f;
   var trazas = [
-    { x:f, y:h.y, type:'scatter', mode:'lines', line:{ color:'#8b949e', width: grande ? 1.4 : 1.2 },
+    { x:f, y:d.y, type:'scatter', mode:'lines', line:{ color:'#8b949e', width: grande ? 1.4 : 1.2 },
       hovertemplate:'%{x}: %{y:.2f}<extra></extra>' },
-    { x:h.xv, y:h.yv, type:'scatter', mode:'markers', marker:{ color: h.info ? '#8b949e' : '#3fb950', size: grande ? 7 : 5 },
+    { x:d.xv, y:d.yv, type:'scatter', mode:'markers', marker:{ color: h.info ? '#8b949e' : '#3fb950', size: grande ? (f.length > 600 ? 5 : 7) : 5 },
       hovertemplate:'%{x}: %{y:.2f} ' + (h.info ? '(en regimen)' : '(verde)') + '<extra></extra>' }
   ];
   var lv = semVivoPunto(id);
   if (lv){
-    trazas.push({ x:[f[f.length - 1], lv.fecha], y:[h.y[h.y.length - 1], lv.y], type:'scatter', mode:'lines',
+    trazas.push({ x:[f[f.length - 1], lv.fecha], y:[d.y[d.y.length - 1], lv.y], type:'scatter', mode:'lines',
                   line:{ color:'#f0b849', width:1.2, dash:'dot' }, hoverinfo:'skip' });
     trazas.push({ x:[lv.fecha], y:[lv.y], type:'scatter', mode:'markers', text:[lv.txt], hoverinfo:'text',
                   marker:{ size: grande ? 14 : 10, symbol:'circle',
@@ -571,7 +613,7 @@ function semLayout(id, grande){
 /* Rango de la ventana grande: ultimos `dias` (0 = toda la historia), con el eje Y ajustado
    a lo que se ve (Plotly no reajusta Y solo al cambiar el rango de X). */
 function semRango(id, dias){
-  var h = window.SEM_H[id], f = h.s.hist.f, y = h.y;
+  var h = window.SEM_H[id], d = semDatos(id, true), f = d.f, y = d.y;
   var lv = semVivoPunto(id);
   var fin = new Date((lv ? lv.fecha : f[f.length - 1]) + 'T00:00:00Z');
   var ini = dias ? new Date(fin.getTime() - dias * 86400000) : new Date(f[0] + 'T00:00:00Z');
@@ -596,7 +638,13 @@ function semAmplia(id){
   window.SEM_REV = String(Date.now());
   document.getElementById('sem-m-tit').textContent = h.s.nombre + '  |  ' + h.s.variable;
   document.getElementById('sem-modal').classList.add('on');
+  semAviso('');
   semPintaModal(true);
+  semCargaCompleta().then(function(){
+    if (window.SEM_MODAL === id) semPintaModal(false);   /* misma vista, ya con toda la historia */
+  }, function(){
+    if (window.SEM_MODAL === id) semAviso('Historia completa no disponible: solo se ven las ultimas 260 sesiones.');
+  });
 }
 function semPintaModal(abrir){
   var id = window.SEM_MODAL;
@@ -615,9 +663,16 @@ function semPintaModal(abrir){
     if (!fl.yaxis.autorange) lay.yaxis.range = fl.yaxis.range.slice();
   }
   Plotly.react('sem-modal-plot', semTrazas(id, true), lay, SEM_CFG_GRANDE);
+  window.SEM_MODAL_FULL = !!(window.SEM_FULL && window.SEM_FULL[id]);
+  if (!window.SEM_DBL && g && g.on){
+    window.SEM_DBL = true;
+    /* Plotly ya ha devuelto la vista al rango de apertura (1A); la leyenda promete 'ver todo' */
+    g.on('plotly_doubleclick', function(){ semPeriodo(0); });
+  }
 }
 function semCierra(){
   window.SEM_MODAL = null;
+  window.SEM_DBL = false;
   document.getElementById('sem-modal').classList.remove('on');
   if (window.Plotly) Plotly.purge('sem-modal-plot');
 }
@@ -628,14 +683,30 @@ function semCierra(){
   document.getElementById('sem-m-x').addEventListener('click', semCierra);
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && window.SEM_MODAL) semCierra(); });
   Array.prototype.forEach.call(m.querySelectorAll('.mrng button'), function(b){
-    b.addEventListener('click', function(){
-      var id = window.SEM_MODAL;
-      if (!id || !window.SEM_H[id]) return;
-      var r = semRango(id, parseInt(b.getAttribute('data-d'), 10));
-      Plotly.relayout('sem-modal-plot', { 'xaxis.range': r.x, 'yaxis.range': r.y });
-    });
+    b.addEventListener('click', function(){ semPeriodo(parseInt(b.getAttribute('data-d'), 10)); });
   });
 })();
+/* Periodo de la ventana grande: `dias` hacia atras desde la ultima fecha (0 = todo). Hasta 1A bastan las 260
+   sesiones de data.json; los largos esperan a estr.json y, si falla, se dibuja lo que haya con el aviso. */
+function semPeriodo(dias){
+  var id = window.SEM_MODAL;
+  if (!id || !window.SEM_H[id]) return;
+  var aplica = function(){
+    if (window.SEM_MODAL !== id) return;
+    var r = semRango(id, dias);
+    Plotly.relayout('sem-modal-plot', { 'xaxis.range': r.x, 'yaxis.range': r.y });
+  };
+  if (dias > 0 && dias <= 365) { aplica(); return; }
+  semCargaCompleta().then(function(){
+    if (window.SEM_MODAL !== id) return;
+    if (!window.SEM_MODAL_FULL) semPintaModal(false);
+    semAviso('');
+    aplica();
+  }, function(){
+    semAviso('Historia completa no disponible: solo se ven las ultimas 260 sesiones.');
+    aplica();
+  });
+}
 /* La lectura EN VIVO (vivo.json) se superpone a cada tarjeta. Es provisional:
    anticipa como puede quedar el cierre de hoy, que es el que mandara manana. */
 function aplicaVivoSem(){
