@@ -1,15 +1,15 @@
 {
  "base": {
-  "spot": 17.25,
-  "spot_edad_min": 15.1,
+  "spot": 17.23,
+  "spot_edad_min": 20.2,
   "spot_vivo": true,
-  "valor": 0.080663,
-  "pct": 51.5,
+  "valor": 0.082311,
+  "pct": 50.4,
   "obs": 1109,
   "fiable": true
  },
- "momento": "2026-10-28 16:45:05",
- "ventana_s": 4.15,
+ "momento": "2026-10-28 17:00:05",
+ "ventana_s": 8.65,
  "todas_a_la_vez": true,
  "patas_en_vivo": 8,
  "patas_total": 8,
@@ -21,10 +21,10 @@
    "hueco": "M1",
    "contrato": "VXX2026",
    "vencimiento": "2026-11-18",
-   "precio": 18.59,
+   "precio": 18.6,
    "origen": "vivo",
-   "edad_min": 15.1,
-   "vela": "2026-10-28 16:30"
+   "edad_min": 20.2,
+   "vela": "2026-10-28 16:40"
   },
   {
    "hueco": "M2",
@@ -32,8 +32,8 @@
    "vencimiento": "2026-12-16",
    "precio": 18.75,
    "origen": "vivo",
-   "edad_min": 15.1,
-   "vela": "2026-10-28 16:30"
+   "edad_min": 20.2,
+   "vela": "2026-10-28 16:40"
   },
   {
    "hueco": "M3",
@@ -41,8 +41,8 @@
    "vencimiento": "2027-01-20",
    "precio": 19.75,
    "origen": "vivo",
-   "edad_min": 20.1,
-   "vela": "2026-10-28 16:25"
+   "edad_min": 20.2,
+   "vela": "2026-10-28 16:40"
   },
   {
    "hueco": "M4",
@@ -50,8 +50,8 @@
    "vencimiento": "2027-02-17",
    "precio": 20.2,
    "origen": "vivo",
-   "edad_min": 15.1,
-   "vela": "2026-10-28 16:30"
+   "edad_min": 20.2,
+   "vela": "2026-10-28 16:40"
   },
   {
    "hueco": "M5",
@@ -59,8 +59,8 @@
    "vencimiento": "2027-03-17",
    "precio": 20.45,
    "origen": "vivo",
-   "edad_min": 20.1,
-   "vela": "2026-10-28 16:25"
+   "edad_min": 20.2,
+   "vela": "2026-10-28 16:40"
   },
   {
    "hueco": "M6",
@@ -68,8 +68,8 @@
    "vencimiento": "2027-04-21",
    "precio": 20.85,
    "origen": "vivo",
-   "edad_min": 20.1,
-   "vela": "2026-10-28 16:25"
+   "edad_min": 20.2,
+   "vela": "2026-10-28 16:40"
   },
   {
    "hueco": "M7",
@@ -77,8 +77,8 @@
    "vencimiento": "2027-05-18",
    "precio": 21.0,
    "origen": "vivo",
-   "edad_min": 20.1,
-   "vela": "2026-10-28 16:25"
+   "edad_min": 25.2,
+   "vela": "2026-10-28 16:35"
   },
   {
    "hueco": "M8",
@@ -86,50 +86,50 @@
    "vencimiento": "2027-06-16",
    "precio": 21.1,
    "origen": "vivo",
-   "edad_min": 45.1,
+   "edad_min": 60.2,
    "vela": "2026-10-28 16:00"
   }
  ],
  "pares": {
   "M2/M1": {
    "pct": 79.4,
-   "ratio": 0.008607,
+   "ratio": 0.008065,
    "obs": 1109,
    "fiable": true
   },
   "M3/M1": {
-   "pct": 61.4,
-   "ratio": 0.062399,
+   "pct": 61.8,
+   "ratio": 0.061828,
    "obs": 1109,
    "fiable": true
   },
   "M4/M1": {
    "pct": 59.1,
-   "ratio": 0.086606,
+   "ratio": 0.086022,
    "obs": 1109,
    "fiable": true
   },
   "M5/M1": {
-   "pct": 57.9,
-   "ratio": 0.100054,
+   "pct": 58.0,
+   "ratio": 0.099462,
    "obs": 1109,
    "fiable": true
   },
   "M6/M1": {
    "pct": 55.9,
-   "ratio": 0.121571,
+   "ratio": 0.120968,
    "obs": 1109,
    "fiable": true
   },
   "M7/M1": {
-   "pct": 58.0,
-   "ratio": 0.12964,
+   "pct": 58.1,
+   "ratio": 0.129032,
    "obs": 1084,
    "fiable": true
   },
   "M8/M1": {
-   "pct": 59.3,
-   "ratio": 0.135019,
+   "pct": 59.7,
+   "ratio": 0.134409,
    "obs": 1053,
    "fiable": true
   },
@@ -264,7 +264,7 @@
   {
    "id": "long_put_uvxy",
    "estado": "NO",
-   "valor": 0.008607,
+   "valor": 0.008065,
    "fiable": true,
    "nombre": "LONG PUT UVXY",
    "variable": "M2/M1 - 1",
@@ -288,7 +288,7 @@
   {
    "id": "short_call_uvxy",
    "estado": "NO",
-   "valor": 0.008607,
+   "valor": 0.008065,
    "fiable": true,
    "nombre": "SHORT CALL UVXY",
    "variable": "M2/M1 - 1",
@@ -312,7 +312,7 @@
   {
    "id": "short_put_uvxy",
    "estado": "NO",
-   "valor": 0.008607,
+   "valor": 0.008065,
    "fiable": true,
    "nombre": "SHORT PUT UVXY",
    "variable": "M2/M1 - 1",
