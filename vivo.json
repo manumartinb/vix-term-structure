@@ -1,15 +1,15 @@
 {
  "base": {
-  "spot": 20.63,
+  "spot": 20.75,
   "spot_edad_min": 15.1,
   "spot_vivo": true,
-  "valor": -0.040319,
-  "pct": 89.2,
+  "valor": -0.045869,
+  "pct": 90.4,
   "obs": 893,
   "fiable": true
  },
- "momento": "2026-11-03 20:45:05",
- "ventana_s": 2.99,
+ "momento": "2026-11-03 21:00:05",
+ "ventana_s": 4.21,
  "todas_a_la_vez": true,
  "patas_en_vivo": 7,
  "patas_total": 8,
@@ -23,8 +23,8 @@
    "vencimiento": "2026-11-18",
    "precio": 20.05,
    "origen": "vivo",
-   "edad_min": 15.1,
-   "vela": "2026-11-03 20:30"
+   "edad_min": 20.1,
+   "vela": "2026-11-03 20:40"
   },
   {
    "hueco": "M2",
@@ -32,8 +32,8 @@
    "vencimiento": "2026-12-16",
    "precio": 19.58,
    "origen": "vivo",
-   "edad_min": 15.1,
-   "vela": "2026-11-03 20:30"
+   "edad_min": 20.1,
+   "vela": "2026-11-03 20:40"
   },
   {
    "hueco": "M3",
@@ -41,8 +41,8 @@
    "vencimiento": "2027-01-20",
    "precio": 20.2,
    "origen": "vivo",
-   "edad_min": 15.1,
-   "vela": "2026-11-03 20:30"
+   "edad_min": 20.1,
+   "vela": "2026-11-03 20:40"
   },
   {
    "hueco": "M4",
@@ -51,7 +51,7 @@
    "precio": 20.5,
    "origen": "vivo",
    "edad_min": 20.1,
-   "vela": "2026-11-03 20:25"
+   "vela": "2026-11-03 20:40"
   },
   {
    "hueco": "M5",
@@ -59,8 +59,8 @@
    "vencimiento": "2027-03-17",
    "precio": 20.6,
    "origen": "vivo",
-   "edad_min": 15.1,
-   "vela": "2026-11-03 20:30"
+   "edad_min": 20.1,
+   "vela": "2026-11-03 20:40"
   },
   {
    "hueco": "M6",
@@ -68,8 +68,8 @@
    "vencimiento": "2027-04-21",
    "precio": 20.9,
    "origen": "vivo",
-   "edad_min": 15.1,
-   "vela": "2026-11-03 20:30"
+   "edad_min": 20.1,
+   "vela": "2026-11-03 20:40"
   },
   {
    "hueco": "M7",
@@ -77,8 +77,8 @@
    "vencimiento": "2027-05-18",
    "precio": 20.95,
    "origen": "vivo",
-   "edad_min": 25.1,
-   "vela": "2026-11-03 20:20"
+   "edad_min": 20.1,
+   "vela": "2026-11-03 20:40"
   },
   {
    "hueco": "M8",
@@ -86,7 +86,7 @@
    "vencimiento": "2027-06-16",
    "precio": 21.125,
    "origen": "cierre_previo",
-   "edad_min": 275.1,
+   "edad_min": 290.1,
    "vela": "2026-11-03 16:10"
   }
  ],
@@ -279,7 +279,7 @@
    "oficial_motivo": null,
    "accion_si": "Comprar puts de UVXY con mas de 200 dias a vencimiento, en los strikes con delta mas cercana a -0,40 y a -0,50, a precio medio, a las 10:30 de Nueva York (16:30 en Espana) de la sesion siguiente al cierre. Cada sesion en verde es una entrada. La evidencia promedia todos los vencimientos de mas de 200 dias y los dos deltas; el vencimiento mas lejano rinde unos 3 pp menos.",
    "salida": "Vender cuando pase la mitad de los dias que le quedaban a la put al comprarla (si quedaban 330, a los 165).",
-   "lecturas_si": 22,
+   "lecturas_si": 23,
    "confirmaciones": 2,
    "confirmado": true,
    "aviso_vivo": "previo",
@@ -303,7 +303,7 @@
    "oficial_motivo": null,
    "accion_si": "Vender call spread de UVXY: vender la call con mas de 220 dias a vencimiento (deltas 0,3 a 0,6: con 0,1-0,2 casi nunca existe la pata de techo) y comprar, del mismo vencimiento, la call del primer strike igual o mayor que el doble del vendido (techo). Si esa call no cotiza, esa linea no se opera. Precio medio, a las 10:30 de Nueva York (16:30 en Espana) de la sesion siguiente al cierre. NUNCA la call desnuda: en mar-2020 la cartera perdio mas del doble de su capital.",
    "salida": "Recomprar el spread cuando pase el 90 % de los dias que le quedaban al vender (si quedaban 380, a los 342). Sin stops: cerrar en el pico del miedo es lo peor que se puede hacer con esta venta.",
-   "lecturas_si": 22,
+   "lecturas_si": 23,
    "confirmaciones": 2,
    "confirmado": true,
    "aviso_vivo": "previo",
