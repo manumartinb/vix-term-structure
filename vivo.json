@@ -1,15 +1,15 @@
 {
  "base": {
-  "spot": 17.63,
-  "spot_edad_min": 15.2,
+  "spot": 17.53,
+  "spot_edad_min": 20.2,
   "spot_vivo": true,
-  "valor": 0.054189,
-  "pct": 64.6,
+  "valor": 0.056923,
+  "pct": 63.4,
   "obs": 1160,
   "fiable": true
  },
- "momento": "2026-11-11 19:00:09",
- "ventana_s": 6.87,
+ "momento": "2026-11-11 19:15:11",
+ "ventana_s": 4.2,
  "todas_a_la_vez": true,
  "patas_en_vivo": 8,
  "patas_total": 8,
@@ -24,34 +24,34 @@
    "precio": 18.15,
    "origen": "vivo",
    "edad_min": 15.2,
-   "vela": "2026-11-11 18:45"
+   "vela": "2026-11-11 19:00"
   },
   {
    "hueco": "M2",
    "contrato": "VXZ2026",
    "vencimiento": "2026-12-16",
-   "precio": 18.68,
+   "precio": 18.61,
    "origen": "vivo",
    "edad_min": 15.2,
-   "vela": "2026-11-11 18:45"
+   "vela": "2026-11-11 19:00"
   },
   {
    "hueco": "M3",
    "contrato": "VXF2027",
    "vencimiento": "2027-01-20",
-   "precio": 19.56,
+   "precio": 19.5,
    "origen": "vivo",
    "edad_min": 15.2,
-   "vela": "2026-11-11 18:45"
+   "vela": "2026-11-11 19:00"
   },
   {
    "hueco": "M4",
    "contrato": "VXG2027",
    "vencimiento": "2027-02-17",
-   "precio": 20.03,
+   "precio": 19.98,
    "origen": "vivo",
    "edad_min": 15.2,
-   "vela": "2026-11-11 18:45"
+   "vela": "2026-11-11 19:00"
   },
   {
    "hueco": "M5",
@@ -60,25 +60,25 @@
    "precio": 20.25,
    "origen": "vivo",
    "edad_min": 15.2,
-   "vela": "2026-11-11 18:45"
+   "vela": "2026-11-11 19:00"
   },
   {
    "hueco": "M6",
    "contrato": "VXJ2027",
    "vencimiento": "2027-04-21",
-   "precio": 20.72,
+   "precio": 20.67,
    "origen": "vivo",
-   "edad_min": 20.2,
-   "vela": "2026-11-11 18:40"
+   "edad_min": 15.2,
+   "vela": "2026-11-11 19:00"
   },
   {
    "hueco": "M7",
    "contrato": "VXK2027",
    "vencimiento": "2027-05-18",
-   "precio": 20.85,
+   "precio": 20.8,
    "origen": "vivo",
-   "edad_min": 20.2,
-   "vela": "2026-11-11 18:40"
+   "edad_min": 15.2,
+   "vela": "2026-11-11 19:00"
   },
   {
    "hueco": "M8",
@@ -86,26 +86,26 @@
    "vencimiento": "2027-06-16",
    "precio": 20.85,
    "origen": "vivo",
-   "edad_min": 20.2,
+   "edad_min": 35.2,
    "vela": "2026-11-11 18:40"
   }
  ],
  "pares": {
   "M2/M1": {
-   "pct": 72.6,
-   "ratio": 0.029201,
+   "pct": 74.6,
+   "ratio": 0.025344,
    "obs": 1160,
    "fiable": true
   },
   "M3/M1": {
-   "pct": 63.7,
-   "ratio": 0.077686,
+   "pct": 65.1,
+   "ratio": 0.07438,
    "obs": 1160,
    "fiable": true
   },
   "M4/M1": {
-   "pct": 62.4,
-   "ratio": 0.103581,
+   "pct": 63.1,
+   "ratio": 0.100826,
    "obs": 1160,
    "fiable": true
   },
@@ -116,14 +116,14 @@
    "fiable": true
   },
   "M6/M1": {
-   "pct": 59.4,
-   "ratio": 0.141598,
+   "pct": 59.8,
+   "ratio": 0.138843,
    "obs": 1160,
    "fiable": true
   },
   "M7/M1": {
-   "pct": 61.3,
-   "ratio": 0.14876,
+   "pct": 62.0,
+   "ratio": 0.146006,
    "obs": 1130,
    "fiable": true
   },
@@ -134,104 +134,104 @@
    "fiable": true
   },
   "M3/M2": {
-   "pct": 44.0,
-   "ratio": 0.047109,
+   "pct": 43.5,
+   "ratio": 0.047824,
    "obs": 1160,
    "fiable": true
   },
   "M4/M2": {
-   "pct": 46.9,
-   "ratio": 0.07227,
+   "pct": 46.5,
+   "ratio": 0.073616,
    "obs": 1160,
    "fiable": true
   },
   "M5/M2": {
-   "pct": 51.9,
-   "ratio": 0.084047,
+   "pct": 49.7,
+   "ratio": 0.088125,
    "obs": 1160,
    "fiable": true
   },
   "M6/M2": {
-   "pct": 47.1,
-   "ratio": 0.109208,
+   "pct": 46.5,
+   "ratio": 0.110693,
    "obs": 1160,
    "fiable": true
   },
   "M7/M2": {
-   "pct": 51.4,
-   "ratio": 0.116167,
+   "pct": 50.8,
+   "ratio": 0.117679,
    "obs": 1130,
    "fiable": true
   },
   "M8/M2": {
-   "pct": 54.5,
-   "ratio": 0.116167,
+   "pct": 53.8,
+   "ratio": 0.120365,
    "obs": 1102,
    "fiable": true
   },
   "M4/M3": {
-   "pct": 51.9,
-   "ratio": 0.024029,
+   "pct": 51.0,
+   "ratio": 0.024615,
    "obs": 1160,
    "fiable": true
   },
   "M5/M3": {
-   "pct": 56.2,
-   "ratio": 0.035276,
+   "pct": 53.8,
+   "ratio": 0.038462,
    "obs": 1160,
    "fiable": true
   },
   "M6/M3": {
-   "pct": 49.5,
-   "ratio": 0.059305,
+   "pct": 49.0,
+   "ratio": 0.06,
    "obs": 1160,
    "fiable": true
   },
   "M7/M3": {
    "pct": 53.4,
-   "ratio": 0.065951,
+   "ratio": 0.066667,
    "obs": 1130,
    "fiable": true
   },
   "M8/M3": {
-   "pct": 57.2,
-   "ratio": 0.065951,
+   "pct": 56.0,
+   "ratio": 0.069231,
    "obs": 1102,
    "fiable": true
   },
   "M5/M4": {
-   "pct": 62.0,
-   "ratio": 0.010984,
+   "pct": 57.5,
+   "ratio": 0.013514,
    "obs": 1160,
    "fiable": true
   },
   "M6/M4": {
    "pct": 48.1,
-   "ratio": 0.034448,
+   "ratio": 0.034535,
    "obs": 1160,
    "fiable": true
   },
   "M7/M4": {
-   "pct": 52.9,
-   "ratio": 0.040939,
+   "pct": 52.7,
+   "ratio": 0.041041,
    "obs": 1130,
    "fiable": true
   },
   "M8/M4": {
-   "pct": 60.6,
-   "ratio": 0.040939,
+   "pct": 58.4,
+   "ratio": 0.043544,
    "obs": 1102,
    "fiable": true
   },
   "M6/M5": {
-   "pct": 28.5,
-   "ratio": 0.02321,
+   "pct": 33.9,
+   "ratio": 0.020741,
    "obs": 1160,
    "fiable": true
   },
   "M7/M5": {
-   "pct": 46.1,
-   "ratio": 0.02963,
+   "pct": 49.1,
+   "ratio": 0.02716,
    "obs": 1130,
    "fiable": true
   },
@@ -243,19 +243,19 @@
   },
   "M7/M6": {
    "pct": 61.2,
-   "ratio": 0.006274,
+   "ratio": 0.006289,
    "obs": 1130,
    "fiable": true
   },
   "M8/M6": {
-   "pct": 69.8,
-   "ratio": 0.006274,
+   "pct": 65.8,
+   "ratio": 0.008708,
    "obs": 1102,
    "fiable": true
   },
   "M8/M7": {
-   "pct": 73.3,
-   "ratio": 0.0,
+   "pct": 66.1,
+   "ratio": 0.002404,
    "obs": 1082,
    "fiable": true
   }
@@ -264,7 +264,7 @@
   {
    "id": "long_put_uvxy",
    "estado": "NO",
-   "valor": 0.029201,
+   "valor": 0.025344,
    "fiable": true,
    "nombre": "LONG PUT UVXY",
    "variable": "M2/M1 - 1",
@@ -288,7 +288,7 @@
   {
    "id": "short_call_uvxy",
    "estado": "NO",
-   "valor": 0.029201,
+   "valor": 0.025344,
    "fiable": true,
    "nombre": "SHORT CALL UVXY",
    "variable": "M2/M1 - 1",
@@ -312,7 +312,7 @@
   {
    "id": "short_put_uvxy",
    "estado": "NO",
-   "valor": 0.029201,
+   "valor": 0.025344,
    "fiable": true,
    "nombre": "SHORT PUT UVXY",
    "variable": "M2/M1 - 1",
