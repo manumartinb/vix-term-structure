@@ -1,15 +1,15 @@
 {
  "base": {
   "spot": null,
-  "spot_edad_min": 1305.1,
+  "spot_edad_min": 1320.1,
   "spot_vivo": false,
   "valor": null,
   "pct": null,
   "obs": 0,
   "fiable": false
  },
- "momento": "2026-11-26 20:00:05",
- "ventana_s": 4.19,
+ "momento": "2026-11-26 20:15:05",
+ "ventana_s": 3.31,
  "todas_a_la_vez": true,
  "patas_en_vivo": 0,
  "patas_total": 8,
@@ -23,7 +23,7 @@
    "vencimiento": "2026-12-16",
    "precio": 25.0258,
    "origen": "cierre_previo",
-   "edad_min": 155.1,
+   "edad_min": 170.1,
    "vela": "2026-11-26 17:25"
   },
   {
@@ -32,7 +32,7 @@
    "vencimiento": "2027-01-20",
    "precio": 24.2921,
    "origen": "cierre_previo",
-   "edad_min": 155.1,
+   "edad_min": 170.1,
    "vela": "2026-11-26 17:25"
   },
   {
@@ -41,7 +41,7 @@
    "vencimiento": "2027-02-17",
    "precio": 23.9679,
    "origen": "cierre_previo",
-   "edad_min": 155.1,
+   "edad_min": 170.1,
    "vela": "2026-11-26 17:25"
   },
   {
@@ -50,7 +50,7 @@
    "vencimiento": "2027-03-17",
    "precio": 23.5523,
    "origen": "cierre_previo",
-   "edad_min": 155.1,
+   "edad_min": 170.1,
    "vela": "2026-11-26 17:25"
   },
   {
@@ -59,7 +59,7 @@
    "vencimiento": "2027-04-21",
    "precio": 23.4018,
    "origen": "cierre_previo",
-   "edad_min": 155.1,
+   "edad_min": 170.1,
    "vela": "2026-11-26 17:25"
   },
   {
@@ -68,7 +68,7 @@
    "vencimiento": "2027-05-18",
    "precio": 23.225,
    "origen": "cierre_previo",
-   "edad_min": 155.1,
+   "edad_min": 170.1,
    "vela": "2026-11-26 17:25"
   },
   {
@@ -77,7 +77,7 @@
    "vencimiento": "2027-06-16",
    "precio": 23.125,
    "origen": "cierre_previo",
-   "edad_min": 170.1,
+   "edad_min": 185.1,
    "vela": "2026-11-26 17:10"
   },
   {
@@ -86,7 +86,7 @@
    "vencimiento": "2027-07-21",
    "precio": 23.15,
    "origen": "cierre_previo",
-   "edad_min": 500.1,
+   "edad_min": 515.1,
    "vela": "2026-11-26 11:40"
   }
  ],
