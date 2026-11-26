@@ -1,15 +1,15 @@
 {
  "base": {
   "spot": null,
-  "spot_edad_min": 1185.2,
+  "spot_edad_min": 1200.1,
   "spot_vivo": false,
   "valor": null,
   "pct": null,
   "obs": 0,
   "fiable": false
  },
- "momento": "2026-11-26 18:00:06",
- "ventana_s": 5.42,
+ "momento": "2026-11-26 18:15:06",
+ "ventana_s": 4.18,
  "todas_a_la_vez": true,
  "patas_en_vivo": 7,
  "patas_total": 8,
@@ -23,7 +23,7 @@
    "vencimiento": "2026-12-16",
    "precio": 24.6,
    "origen": "vivo",
-   "edad_min": 35.2,
+   "edad_min": 50.1,
    "vela": "2026-11-26 17:25"
   },
   {
@@ -32,7 +32,7 @@
    "vencimiento": "2027-01-20",
    "precio": 23.92,
    "origen": "vivo",
-   "edad_min": 35.2,
+   "edad_min": 50.1,
    "vela": "2026-11-26 17:25"
   },
   {
@@ -41,7 +41,7 @@
    "vencimiento": "2027-02-17",
    "precio": 23.67,
    "origen": "vivo",
-   "edad_min": 35.2,
+   "edad_min": 50.1,
    "vela": "2026-11-26 17:25"
   },
   {
@@ -50,7 +50,7 @@
    "vencimiento": "2027-03-17",
    "precio": 23.3,
    "origen": "vivo",
-   "edad_min": 35.2,
+   "edad_min": 50.1,
    "vela": "2026-11-26 17:25"
   },
   {
@@ -59,7 +59,7 @@
    "vencimiento": "2027-04-21",
    "precio": 23.2,
    "origen": "vivo",
-   "edad_min": 35.2,
+   "edad_min": 50.1,
    "vela": "2026-11-26 17:25"
   },
   {
@@ -68,7 +68,7 @@
    "vencimiento": "2027-05-18",
    "precio": 23.0,
    "origen": "vivo",
-   "edad_min": 35.2,
+   "edad_min": 50.1,
    "vela": "2026-11-26 17:25"
   },
   {
@@ -77,7 +77,7 @@
    "vencimiento": "2027-06-16",
    "precio": 22.9,
    "origen": "vivo",
-   "edad_min": 50.2,
+   "edad_min": 65.1,
    "vela": "2026-11-26 17:10"
   },
   {
@@ -86,7 +86,7 @@
    "vencimiento": "2027-07-21",
    "precio": 23.15,
    "origen": "cierre_previo",
-   "edad_min": 380.2,
+   "edad_min": 395.1,
    "vela": "2026-11-26 11:40"
   }
  ],
@@ -279,7 +279,7 @@
    "oficial_motivo": null,
    "accion_si": "Comprar puts de UVXY con mas de 200 dias a vencimiento, en los strikes con delta mas cercana a -0,40 y a -0,50, a precio medio, a las 10:30 de Nueva York (16:30 en Espana) de la sesion siguiente al cierre. Cada sesion en verde es una entrada. La evidencia promedia todos los vencimientos de mas de 200 dias y los dos deltas; el vencimiento mas lejano rinde unos 3 pp menos.",
    "salida": "Vender cuando pase la mitad de los dias que le quedaban a la put al comprarla (si quedaban 330, a los 165).",
-   "lecturas_si": 11,
+   "lecturas_si": 12,
    "confirmaciones": 2,
    "confirmado": true,
    "aviso_vivo": "previo",
@@ -303,7 +303,7 @@
    "oficial_motivo": null,
    "accion_si": "Vender call spread de UVXY: vender la call con mas de 220 dias a vencimiento (deltas 0,3 a 0,6: con 0,1-0,2 casi nunca existe la pata de techo) y comprar, del mismo vencimiento, la call del primer strike igual o mayor que el doble del vendido (techo). Si esa call no cotiza, esa linea no se opera. Precio medio, a las 10:30 de Nueva York (16:30 en Espana) de la sesion siguiente al cierre. NUNCA la call desnuda: en mar-2020 la cartera perdio mas del doble de su capital.",
    "salida": "Recomprar el spread cuando pase el 90 % de los dias que le quedaban al vender (si quedaban 380, a los 342). Sin stops: cerrar en el pico del miedo es lo peor que se puede hacer con esta venta.",
-   "lecturas_si": 11,
+   "lecturas_si": 12,
    "confirmaciones": 2,
    "confirmado": true,
    "aviso_vivo": "previo",
